@@ -13,7 +13,7 @@ from app.marzyar.schemas import (
     MarzyarMyLimitsResponse,
 )
 
-router = APIRouter(prefix="/marzyar", tags=["Marzyar"])
+router = APIRouter(prefix="/api/marzyar", tags=["Marzyar"])
 
 
 def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdminSettingsResponse:
