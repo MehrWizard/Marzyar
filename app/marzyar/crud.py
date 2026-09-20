@@ -83,10 +83,11 @@ def reset_admin_quota_counter(db: Session, admin_id: int) -> None:
     db.commit()
 
 
-def increment_admin_quota_counter(db: Session, admin_id: int, amount: int) -> None:
+def increment_admin_quota_counter(db: Session, admin_id: int, amount: int, commit: bool = False) -> None:
     """
     Atomically increment admin's consumed traffic in the database when a user's usage is reset
     or when a user is deleted, eliminating lost-update race conditions.
+    Flushes changes within the active transaction; caller commits atomically.
     """
     if amount == 0:
         return
@@ -97,7 +98,10 @@ def increment_admin_quota_counter(db: Session, admin_id: int, amount: int) -> No
         {MarzyarAdminSettings.quota_used_traffic: func.coalesce(MarzyarAdminSettings.quota_used_traffic, 0) + amount},
         synchronize_session=False
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 
 def is_user_locked(db: Session, user_id: int) -> bool:
