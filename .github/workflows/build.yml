@@ -25,7 +25,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./app/dashboard
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Build project
         working-directory: ./app/dashboard
