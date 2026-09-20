@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.db.models import Admin, User
+from app.db.models import Admin as AdminModel
+from app.models.admin import Admin
 from app.marzyar import crud, quota
 from app.marzyar.schemas import (
     MarzyarAdminSettingsModify,
@@ -15,7 +16,7 @@ from app.marzyar.schemas import (
 router = APIRouter(prefix="/marzyar", tags=["Marzyar"])
 
 
-def _build_admin_settings_response(db: Session, admin: Admin) -> MarzyarAdminSettingsResponse:
+def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdminSettingsResponse:
     s = crud.get_or_create_admin_settings(db, admin.id)
     u_count = crud.get_admin_user_count(db, admin.id)
     allocated = crud.get_admin_allocated_traffic(db, admin.id)
@@ -49,12 +50,12 @@ def _build_admin_settings_response(db: Session, admin: Admin) -> MarzyarAdminSet
     )
 
 
-def _get_admin(db: Session, identifier: str) -> Admin:
+def _get_admin(db: Session, identifier: str) -> AdminModel:
     admin = None
     if identifier.isdigit():
-        admin = db.query(Admin).filter(Admin.id == int(identifier)).first()
+        admin = db.query(AdminModel).filter(AdminModel.id == int(identifier)).first()
     if not admin:
-        admin = db.query(Admin).filter(Admin.username == identifier).first()
+        admin = db.query(AdminModel).filter(AdminModel.username == identifier).first()
     if not admin:
         raise HTTPException(status_code=404, detail="Admin not found")
     return admin
@@ -66,7 +67,7 @@ def get_all_admin_settings(
     sudo_admin: Admin = Depends(Admin.check_sudo_admin),
 ):
     """Retrieve Marzyar settings, limits, and real-time quotas for all admins (Sudo only)."""
-    admins = db.query(Admin).all()
+    admins = db.query(AdminModel).all()
     return [_build_admin_settings_response(db, a) for a in admins]
 
 
