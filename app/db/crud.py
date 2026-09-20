@@ -960,15 +960,16 @@ def update_user_status(db: Session, dbuser: User, status: UserStatus) -> User:
 def set_owner(db: Session, dbuser: User, admin: Admin) -> User:
     """
     Sets the owner (admin) of a user.
-
-    Args:
-        db (Session): Database session.
-        dbuser (User): The user object whose owner is to be set.
-        admin (Admin): The admin to set as owner.
-
-    Returns:
-        User: The updated user object.
+    If the user was locked under the previous admin, their lock is cleared so
+    quota auditing can re-evaluate them cleanly under the new admin's limits.
     """
+    try:
+        from app.marzyar import crud as marzyar_crud
+        if marzyar_crud.is_user_locked(db, dbuser.id):
+            marzyar_crud.unlock_users(db, [dbuser.id])
+    except Exception:
+        pass
+
     dbuser.admin = admin
     db.commit()
     db.refresh(dbuser)
@@ -1130,14 +1131,16 @@ def partial_update_admin(db: Session, dbadmin: Admin, modified_admin: AdminParti
 def remove_admin(db: Session, dbadmin: Admin) -> Admin:
     """
     Removes an admin from the database.
-
-    Args:
-        db (Session): Database session.
-        dbadmin (Admin): The admin object to be removed.
-
-    Returns:
-        Admin: The removed admin object.
+    Cleanly unlocks any locked users belonging to this admin before removal.
     """
+    try:
+        from app.marzyar import crud as marzyar_crud
+        locked_ids = marzyar_crud.get_locked_user_ids_for_admin(db, dbadmin.id)
+        if locked_ids:
+            marzyar_crud.unlock_users(db, list(locked_ids))
+    except Exception:
+        pass
+
     db.delete(dbadmin)
     db.commit()
     return dbadmin

@@ -106,7 +106,17 @@ def check_admin_can_modify_user(
                 detail="User is currently locked due to admin quota limits and cannot be activated. Increase or reset admin quota first."
             )
 
-    settings = crud.get_admin_settings(db, admin.id)
+    # Lock admin settings row to prevent concurrent race conditions on user modification
+    try:
+        settings = (
+            db.query(MarzyarAdminSettings)
+            .filter(MarzyarAdminSettings.admin_id == admin.id)
+            .with_for_update()
+            .first()
+        )
+    except Exception:
+        settings = crud.get_admin_settings(db, admin.id)
+
     if not settings:
         return
 
@@ -138,7 +148,7 @@ def check_admin_can_modify_user(
                         status_code=403,
                         detail=f"Admin traffic quota exceeded. New allocated total ({allocated + delta} bytes) exceeds limit ({settings.traffic_limit} bytes)."
                     )
-        elif settings.oversell_allowed and new_status == UserStatus.active:
+        elif settings.oversell_allowed and new_status in [UserStatus.active, UserStatus.on_hold]:
             consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings)
             if consumed >= settings.traffic_limit:
                 raise HTTPException(
@@ -177,12 +187,12 @@ def audit_admin_quotas(db: Session) -> None:
             currently_locked = crud.get_locked_user_ids_for_admin(db, s.admin_id)
 
             if is_exceeded:
-                # Find active or on_hold users not yet locked
+                # Find active, on_hold, or limited users not yet locked
                 active_users = (
                     db.query(User)
                     .filter(
                         User.admin_id == s.admin_id,
-                        User.status.in_([UserStatus.active, UserStatus.on_hold]),
+                        User.status.in_([UserStatus.active, UserStatus.on_hold, UserStatus.limited]),
                         ~User.id.in_(currently_locked) if currently_locked else True
                     )
                     .all()
