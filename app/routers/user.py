@@ -54,6 +54,15 @@ def add_user(
                 detail=f"Protocol {proxy_type} is disabled on your server",
             )
 
+    # Marzyar: validate admin user limits, quota, and allowed inbounds
+    from app.marzyar.quota import check_admin_can_create_user
+    check_admin_can_create_user(
+        db=db,
+        admin=admin,
+        data_limit=new_user.data_limit,
+        inbounds=new_user.inbounds,
+    )
+
     try:
         dbuser = crud.create_user(
             db, new_user, admin=crud.get_admin(db, admin.username)
@@ -107,6 +116,17 @@ def modify_user(
                 status_code=400,
                 detail=f"Protocol {proxy_type} is disabled on your server",
             )
+
+    # Marzyar: validate admin quota, locked status, and allowed inbounds
+    from app.marzyar.quota import check_admin_can_modify_user
+    check_admin_can_modify_user(
+        db=db,
+        admin=admin,
+        target_user=dbuser,
+        new_data_limit=modified_user.data_limit,
+        new_inbounds=modified_user.inbounds,
+        new_status=modified_user.status,
+    )
 
     old_status = dbuser.status
     dbuser = crud.update_user(db, dbuser, modified_user)

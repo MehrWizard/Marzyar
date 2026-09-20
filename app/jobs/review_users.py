@@ -114,6 +114,13 @@ def review():
 
             logger.info(f"User \"{user.username}\" status changed to {status}")
 
+        # Marzyar: audit reseller quotas and enforce lock/unlock state
+        try:
+            from app.marzyar.quota import audit_admin_quotas
+            audit_admin_quotas(db)
+        except Exception as e:
+            logger.error(f"[Marzyar] Error during periodic quota audit: {e}")
+
 
 scheduler.add_job(review, 'interval',
                   seconds=JOB_REVIEW_USERS_INTERVAL,

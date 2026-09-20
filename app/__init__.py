@@ -58,6 +58,11 @@ def on_startup():
         raise ValueError(
             f"you can't use /{XRAY_SUBSCRIPTION_PATH}/ as subscription path it reserved for {app.title}"
         )
+    try:
+        from app.marzyar import init_marzyar_db
+        init_marzyar_db()
+    except Exception as e:
+        logger.error(f"[Marzyar] Database initialization error: {e}")
     scheduler.start()
 
 

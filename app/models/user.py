@@ -289,6 +289,7 @@ class UserResponse(User):
     subscription_url: str = ""
     proxies: dict
     excluded_inbounds: Dict[ProxyTypes, List[str]] = {}
+    is_locked: bool = False
 
     admin: Optional[Admin] = None
     model_config = ConfigDict(from_attributes=True)

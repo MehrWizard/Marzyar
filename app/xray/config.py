@@ -380,7 +380,18 @@ class XRayConfig(dict):
                 db_models.Proxy.id == db_models.excluded_inbounds_association.c.proxy_id
             ).filter(
                 db_models.User.status.in_([UserStatus.active, UserStatus.on_hold])
-            ).group_by(
+            )
+
+            # Marzyar: exclude users who are currently locked due to admin quota
+            try:
+                from app.marzyar.crud import get_locked_user_ids
+                locked_ids = get_locked_user_ids(db)
+                if locked_ids:
+                    query = query.filter(~db_models.User.id.in_(locked_ids))
+            except Exception:
+                pass
+
+            query = query.group_by(
                 func.lower(db_models.Proxy.type),
                 db_models.User.id,
                 db_models.User.username,

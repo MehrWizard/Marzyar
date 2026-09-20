@@ -9,6 +9,7 @@ from . import (
     user,
     home,
 )
+from app.marzyar import marzyar_router
 
 api_router = APIRouter()
 
@@ -21,6 +22,7 @@ routers = [
     user_template.router,
     user.router,
     home.router,
+    marzyar_router,
 ]
 
 for router in routers:

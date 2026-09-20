@@ -144,6 +144,13 @@ class User(Base):
 
         return _
 
+    @property
+    def is_locked(self) -> bool:
+        try:
+            return bool(self.marzyar_lock)
+        except Exception:
+            return False
+
 
 excluded_inbounds_association = Table(
     "exclude_inbounds_association",

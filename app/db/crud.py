@@ -573,6 +573,13 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
     )
     db.add(usage_log)
 
+    if dbuser.admin_id and dbuser.used_traffic:
+        try:
+            from app.marzyar.crud import increment_admin_quota_counter
+            increment_admin_quota_counter(db, dbuser.admin_id, dbuser.used_traffic)
+        except Exception:
+            pass
+
     dbuser.used_traffic = 0
     dbuser.node_usages.clear()
     if dbuser.status not in (UserStatus.expired or UserStatus.disabled):
@@ -608,6 +615,13 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
         used_traffic_at_reset=dbuser.used_traffic,
     )
     db.add(usage_log)
+
+    if dbuser.admin_id and dbuser.used_traffic:
+        try:
+            from app.marzyar.crud import increment_admin_quota_counter
+            increment_admin_quota_counter(db, dbuser.admin_id, dbuser.used_traffic)
+        except Exception:
+            pass
 
     dbuser.node_usages.clear()
     dbuser.status = UserStatus.active.value

@@ -59,9 +59,30 @@ def get_system_stats(
 
 
 @router.get("/inbounds", response_model=Dict[ProxyTypes, List[ProxyInbound]])
-def get_inbounds(admin: Admin = Depends(Admin.get_current)):
-    """Retrieve inbound configurations grouped by protocol."""
-    return xray.config.inbounds_by_protocol
+def get_inbounds(
+    admin: Admin = Depends(Admin.get_current),
+    db: Session = Depends(get_db),
+):
+    """Retrieve inbound configurations grouped by protocol (filtered by allowed inbounds for resellers)."""
+    inbounds = xray.config.inbounds_by_protocol
+    if admin.is_sudo:
+        return inbounds
+
+    try:
+        from app.marzyar import crud as marzyar_crud
+        settings = marzyar_crud.get_admin_settings(db, admin.id)
+        if settings and settings.allowed_inbounds is not None:
+            allowed = set(settings.allowed_inbounds)
+            filtered = {}
+            for proto, inb_list in inbounds.items():
+                matching = [i for i in inb_list if i.get("tag") in allowed]
+                if matching:
+                    filtered[proto] = matching
+            return filtered
+    except Exception:
+        pass
+
+    return inbounds
 
 
 @router.get(
