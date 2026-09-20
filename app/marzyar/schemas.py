@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MarzyarAdminSettingsModify(BaseModel):
@@ -8,6 +8,20 @@ class MarzyarAdminSettingsModify(BaseModel):
     traffic_limit: Optional[int] = Field(None, description="Maximum traffic quota in bytes (null for unlimited)")
     oversell_allowed: Optional[bool] = Field(None, description="False: allocated data limits; True: consumed traffic")
     allowed_inbounds: Optional[List[str]] = Field(None, description="List of permitted inbound tags (null for all)")
+
+    @field_validator('users_limit')
+    @classmethod
+    def validate_users_limit(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('users_limit must be a non-negative integer or null')
+        return v
+
+    @field_validator('traffic_limit')
+    @classmethod
+    def validate_traffic_limit(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('traffic_limit must be a non-negative integer or null')
+        return v
 
 
 class MarzyarAdminSettingsResponse(BaseModel):
