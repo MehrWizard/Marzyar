@@ -134,10 +134,14 @@ def check_admin_can_modify_user(
                         )
         # Check newly added proxies if inbounds not explicitly specified for them
         if new_proxies:
-            existing_proxy_types = {p.type for p in target_user.proxies}
-            for p_type in new_proxies:
+            existing_proxy_types = {
+                p.type.value if hasattr(p.type, 'value') else str(p.type)
+                for p in target_user.proxies
+            }
+            for p_key in new_proxies:
+                p_type = p_key.value if hasattr(p_key, 'value') else str(p_key)
                 if p_type not in existing_proxy_types:
-                    if not new_inbounds or p_type not in new_inbounds:
+                    if not new_inbounds or (p_type not in new_inbounds and p_key not in new_inbounds):
                         for inbound in xray.config.inbounds_by_protocol.get(p_type, []):
                             tag = inbound.get("tag")
                             if tag and tag not in allowed_set:

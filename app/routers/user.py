@@ -258,9 +258,11 @@ def revoke_user_subscription(
     """Revoke users subscription (Subscription link and proxies)"""
     dbuser = crud.revoke_user_sub(db=db, dbuser=dbuser)
 
-    if dbuser.status in [UserStatus.active, UserStatus.on_hold]:
-        bg.add_task(xray.operations.update_user, dbuser=dbuser)
     user = UserResponse.model_validate(dbuser)
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        bg.add_task(xray.operations.update_user, dbuser=dbuser)
+    else:
+        bg.add_task(xray.operations.remove_user, dbuser=dbuser)
     bg.add_task(
         report.user_subscription_revoked, user=user, user_admin=dbuser.admin, by=admin
     )

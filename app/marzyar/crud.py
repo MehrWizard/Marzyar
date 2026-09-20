@@ -204,8 +204,11 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
                     target_status = UserStatus.expired
                 elif dbuser.data_limit and dbuser.used_traffic >= dbuser.data_limit:
                     target_status = UserStatus.limited
+            elif target_status == UserStatus.limited and dbuser.expire and dbuser.expire <= now_ts:
+                target_status = UserStatus.expired
 
             dbuser.status = target_status
+            dbuser.marzyar_lock = None
             restored.append((dbuser, lock.original_status))
         db.delete(lock)
 
@@ -289,7 +292,9 @@ def enforce_admin_allowed_inbounds(db: Session, admin_id: int, allowed_inbounds:
     for u in users:
         user_modified = False
         for p in u.proxies:
-            all_inbound_tags = [ib["tag"] for ib in xray.config.inbounds_by_protocol.get(p.type, [])]
+            proto_str = p.type.value if hasattr(p.type, 'value') else str(p.type)
+            inbounds_for_proto = xray.config.inbounds_by_protocol.get(proto_str) or xray.config.inbounds_by_protocol.get(p.type, [])
+            all_inbound_tags = [ib["tag"] for ib in inbounds_for_proto]
             current_excluded = {ib.tag for ib in p.excluded_inbounds}
             for tag in all_inbound_tags:
                 if tag not in allowed_set and tag not in current_excluded:

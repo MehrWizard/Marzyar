@@ -147,7 +147,14 @@ class User(Base):
     @property
     def is_locked(self) -> bool:
         try:
-            return bool(self.marzyar_lock)
+            lock = self.marzyar_lock
+            if lock is not None:
+                from sqlalchemy.orm import inspect
+                insp = inspect(lock)
+                if insp.deleted or insp.was_deleted:
+                    return False
+                return True
+            return False
         except Exception:
             pass
         try:
