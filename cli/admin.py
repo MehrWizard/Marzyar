@@ -54,23 +54,33 @@ def list_admins(
     limit: Optional[int] = typer.Option(None, *utils.FLAGS["limit"]),
     username: Optional[str] = typer.Option(None, *utils.FLAGS["username"], help="Search by username"),
 ):
-    """Displays a table of admins"""
+    """Displays a table of admins with Marzyar reseller limits and quotas"""
     with GetDB() as db:
         admins: list[Admin] = crud.get_admins(db, offset=offset, limit=limit, username=username)
+        from app.marzyar import crud as marzyar_crud
+        rows = []
+        for admin in admins:
+            s = marzyar_crud.get_admin_settings(db, admin.id)
+            u_count = marzyar_crud.get_admin_user_count(db, admin.id)
+            u_str = f"{u_count}/{s.users_limit}" if (s and s.users_limit is not None) else str(u_count)
+            t_limit_str = readable_size(s.traffic_limit) if (s and s.traffic_limit is not None) else "Unlimited"
+            consumed_str = readable_size(marzyar_crud.get_admin_total_consumed_traffic(db, admin.id, s)) if s else readable_size(admin.users_usage)
+            oversell_str = ("Yes" if s.oversell_allowed else "No") if s else "N/A"
+            locked_count = len(marzyar_crud.get_locked_user_ids_for_admin(db, admin.id)) if s else 0
+            rows.append((
+                str(admin.username),
+                u_str,
+                t_limit_str,
+                consumed_str,
+                oversell_str,
+                str(locked_count),
+                "✔️" if admin.is_sudo else "✖️",
+                utils.readable_datetime(admin.created_at),
+            ))
+
         utils.print_table(
-            table=Table("Username", 'Usage', 'Reseted usage', "Users Usage", "Is sudo",
-                        "Created at", "Telegram ID", "Discord Webhook"),
-            rows=[
-                (str(admin.username),
-                 calculate_admin_usage(admin.id),
-                 calculate_admin_reseted_usage(admin.id),
-                 readable_size(admin.users_usage),
-                 "✔️" if admin.is_sudo else "✖️",
-                 utils.readable_datetime(admin.created_at),
-                 str(admin.telegram_id or "✖️"),
-                 str(admin.discord_webhook or "✖️"))
-                for admin in admins
-            ]
+            table=Table("Username", "Users", "Quota Limit", "Consumed", "Oversell", "Locked", "Is Sudo", "Created at"),
+            rows=rows
         )
 
 
@@ -224,3 +234,77 @@ def import_from_env(yes_to_all: bool = typer.Option(False, *utils.FLAGS["yes_to_
             f"{updated_user_count} users' admin_id set to the {username}'s id.\n"
             'You must delete SUDO_USERNAME and SUDO_PASSWORD from your env file now.'
         )
+
+
+@app.command(name="set-quota")
+def set_quota(
+    username: str = typer.Option(..., *utils.FLAGS["username"], prompt=True),
+    traffic_limit_gb: Optional[float] = typer.Option(None, "--traffic-limit", "-t", help="Traffic limit in GB (0 to remove limit)"),
+    users_limit: Optional[int] = typer.Option(None, "--users-limit", "-u", help="Users count limit (0 to remove limit)"),
+    oversell: Optional[bool] = typer.Option(None, "--oversell/--no-oversell", help="Allow or disallow overselling"),
+):
+    """
+    Configure Marzyar reseller limits and quota for an admin.
+    """
+    with GetDB() as db:
+        admin: Union[Admin, None] = crud.get_admin(db, username=username)
+        if not admin:
+            utils.error(f'There\'s no admin with username "{username}"!')
+
+        from app.marzyar import crud as marzyar_crud
+        from app.marzyar import quota as marzyar_quota
+        from app.marzyar.schemas import MarzyarAdminSettingsModify
+
+        modify_data = {}
+        if traffic_limit_gb is not None:
+            if traffic_limit_gb <= 0:
+                modify_data["traffic_limit"] = None
+            else:
+                modify_data["traffic_limit"] = int(traffic_limit_gb * 1073741824)
+
+        if users_limit is not None:
+            if users_limit <= 0:
+                modify_data["users_limit"] = None
+            else:
+                modify_data["users_limit"] = users_limit
+
+        if oversell is not None:
+            modify_data["oversell_allowed"] = oversell
+
+        if not modify_data:
+            utils.error("No settings provided to update. Specify --traffic-limit, --users-limit, or --oversell.")
+
+        modify = MarzyarAdminSettingsModify(**modify_data)
+        marzyar_crud.update_admin_settings(db, admin.id, modify)
+        marzyar_quota.audit_admin_quotas(db)
+
+        utils.success(f'Marzyar settings for "{username}" updated successfully.')
+
+
+@app.command(name="reset-quota")
+def reset_quota(
+    username: str = typer.Option(..., *utils.FLAGS["username"], prompt=True),
+    yes_to_all: bool = typer.Option(False, *utils.FLAGS["yes_to_all"], help="Skips confirmations"),
+):
+    """
+    Reset an admin's consumed quota counter and unlock their users.
+    """
+    with GetDB() as db:
+        admin: Union[Admin, None] = crud.get_admin(db, username=username)
+        if not admin:
+            utils.error(f'There\'s no admin with username "{username}"!')
+
+        if not yes_to_all and not typer.confirm(
+            f'Are you sure you want to reset consumed quota for "{username}"? All locked users will be unlocked.',
+            default=False
+        ):
+            utils.error("Operation aborted!")
+
+        from app.marzyar import crud as marzyar_crud
+        from app.marzyar import quota as marzyar_quota
+
+        marzyar_crud.reset_admin_quota_counter(db, admin.id)
+        marzyar_quota.audit_admin_quotas(db)
+
+        utils.success(f'Consumed quota for "{username}" reset successfully and users unlocked.')
+

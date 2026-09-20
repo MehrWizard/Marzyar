@@ -71,7 +71,7 @@ def get_inbounds(
     try:
         from app.marzyar import crud as marzyar_crud
         settings = marzyar_crud.get_admin_settings(db, admin.id)
-        if settings and settings.allowed_inbounds is not None:
+        if settings and settings.allowed_inbounds:
             allowed = set(settings.allowed_inbounds)
             filtered = {}
             for proto, inb_list in inbounds.items():

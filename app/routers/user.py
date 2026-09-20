@@ -139,6 +139,12 @@ def modify_user(
 
     bg.add_task(report.user_updated, user=user, user_admin=dbuser.admin, by=admin)
 
+    try:
+        from app.marzyar import quota as marzyar_quota
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
+
     logger.info(f'User "{user.username}" modified')
 
     if user.status != old_status:
@@ -347,6 +353,12 @@ def set_owner(
 
     dbuser = crud.set_owner(db, dbuser, new_admin)
     user = UserResponse.model_validate(dbuser)
+
+    try:
+        from app.marzyar import quota as marzyar_quota
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
 
     logger.info(f'{user.username}"owner successfully set to{admin.username}')
 

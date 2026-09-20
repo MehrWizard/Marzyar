@@ -535,7 +535,16 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
                 dbproxy.excluded_inbounds = [get_or_create_inbound(db, tag) for tag in tags]
 
     if modify.status is not None:
-        dbuser.status = modify.status
+        try:
+            from app.marzyar.models import MarzyarUserLock
+            lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+            if lock:
+                lock.original_status = modify.status.value
+                dbuser.status = UserStatus.disabled
+            else:
+                dbuser.status = modify.status
+        except Exception:
+            dbuser.status = modify.status
 
     if modify.data_limit is not None:
         dbuser.data_limit = (modify.data_limit or None)

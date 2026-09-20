@@ -35,8 +35,8 @@ def check_admin_can_create_user(
                 detail=f"Admin user limit reached ({current_count}/{settings.users_limit}). Cannot create more users."
             )
 
-    # 2. Check allowed inbounds
-    if settings.allowed_inbounds is not None and inbounds:
+    # 2. Check allowed inbounds (empty or None means all permitted)
+    if settings.allowed_inbounds and inbounds:
         allowed_set = set(settings.allowed_inbounds)
         for proto, tags in inbounds.items():
             for tag in tags:
@@ -97,8 +97,8 @@ def check_admin_can_modify_user(
     if not settings:
         return
 
-    # 2. Check allowed inbounds
-    if settings.allowed_inbounds is not None and new_inbounds:
+    # 2. Check allowed inbounds (empty or None means all permitted)
+    if settings.allowed_inbounds and new_inbounds:
         allowed_set = set(settings.allowed_inbounds)
         for proto, tags in new_inbounds.items():
             for tag in tags:
@@ -111,6 +111,11 @@ def check_admin_can_modify_user(
     # 3. Check traffic quota
     if settings.traffic_limit is not None:
         if not settings.oversell_allowed and new_data_limit is not None:
+            if new_data_limit <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
+                )
             old_limit = target_user.data_limit or 0
             delta = new_data_limit - old_limit
             if delta > 0:
@@ -186,10 +191,10 @@ def audit_admin_quotas(db: Session) -> None:
 
 
 def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:
-    """Helper to unlock users, restore their original status, and re-attach active ones to Xray."""
+    """Helper to unlock users, restore their original status, and re-attach active/on-hold ones to Xray."""
     restored = crud.unlock_users(db, user_ids)
     for u, orig_status in restored:
-        if orig_status == UserStatus.active.value:
+        if orig_status in [UserStatus.active.value, UserStatus.on_hold.value]:
             try:
                 xray.operations.add_user(u)
             except Exception as e:

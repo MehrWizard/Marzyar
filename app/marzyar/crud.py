@@ -72,10 +72,13 @@ def update_admin_settings(
 def reset_admin_quota_counter(db: Session, admin_id: int) -> None:
     """
     Reset an admin's cumulative consumed quota counter.
+    Offsets against current active users' usage so total consumed resets cleanly to 0
+    without modifying user subscriptions or expiring/altering end-user plans.
     Callable only by Sudo Admin.
     """
     settings = get_or_create_admin_settings(db, admin_id)
-    settings.quota_used_traffic = 0
+    active_usage = get_admin_active_users_usage(db, admin_id)
+    settings.quota_used_traffic = -active_usage
     settings.updated_at = datetime.utcnow()
     db.commit()
 
@@ -216,4 +219,4 @@ def get_admin_total_consumed_traffic(
         settings = get_admin_settings(db, admin_id)
     base_counter = settings.quota_used_traffic if settings else 0
     active_usage = get_admin_active_users_usage(db, admin_id)
-    return base_counter + active_usage
+    return max(0, base_counter + active_usage)
