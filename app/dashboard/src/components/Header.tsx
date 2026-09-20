@@ -426,8 +426,8 @@ export const Header: FC<HeaderProps> = ({ actions }) => {
             rel="noopener noreferrer"
             size="sm"
             variant="outline"
-            aria-label="Star Marzdar on GitHub"
-            title="Star Marzdar on GitHub"
+            aria-label="Star Marzyar on GitHub"
+            title="Star Marzyar on GitHub"
             icon={<GitHubIcon width="16px" height="16px" />}
             display={{ base: "inline-flex", md: "none" }}
           />
@@ -448,7 +448,7 @@ export const Header: FC<HeaderProps> = ({ actions }) => {
               data-color-scheme={`no-preference: ${gBtnColor}; light: ${gBtnColor}; dark: ${gBtnColor};`}
               data-size="large"
               data-show-count="true"
-              aria-label="Star Marzdar on GitHub"
+              aria-label="Star Marzyar on GitHub"
             >
               Star
             </GitHubButton>

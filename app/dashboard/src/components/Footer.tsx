@@ -18,7 +18,7 @@ export const Footer: FC<BoxProps> = (props) => {
     >
       <Text color="gray.500" fontSize="xs">
         <Link color="blue.400" href={REPO_URL} isExternal>
-          Marzdar
+          Marzyar
         </Link>
         {version ? ` (v${version}), ` : ", "}
         Made with ❤️ by{" "}
@@ -27,7 +27,7 @@ export const Footer: FC<BoxProps> = (props) => {
         </Link>
       </Text>
       <Text color="gray.500" fontSize="xs" opacity={0.85} lineHeight="base">
-        This is a fork of{" "}
+        A reseller-ready fork of{" "}
         <Link
           color="blue.400"
           href="https://github.com/gozargah/marzban"
@@ -35,8 +35,15 @@ export const Footer: FC<BoxProps> = (props) => {
         >
           Marzban
         </Link>{" "}
-        focusing on completing the user interface based on what was already
-        implemented in the API
+        and{" "}
+        <Link
+          color="blue.400"
+          href="https://github.com/MehrWizard/Marzdar"
+          isExternal
+        >
+          Marzdar
+        </Link>{" "}
+        with native reseller quotas, user limits, and complete UI
       </Text>
     </VStack>
   );
