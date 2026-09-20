@@ -61,6 +61,7 @@ def add_user(
         admin=admin,
         data_limit=new_user.data_limit,
         inbounds=new_user.inbounds,
+        next_plan=new_user.next_plan,
     )
 
     try:
@@ -137,6 +138,8 @@ def modify_user(
         new_inbounds=modified_user.inbounds,
         new_status=modified_user.status,
         new_proxies=modified_user.proxies,
+        new_expire=modified_user.expire,
+        new_next_plan=modified_user.next_plan,
     )
 
     old_status = dbuser.status
@@ -349,6 +352,12 @@ def active_next_plan(
     admin: Admin = Depends(Admin.get_current),
 ):
     """Reset user by next plan"""
+    if not dbuser.next_plan:
+        raise HTTPException(
+            status_code=404,
+            detail="User doesn't have next plan",
+        )
+
     if not admin.is_sudo:
         from app.marzyar.crud import (
             is_user_locked,
@@ -365,9 +374,15 @@ def active_next_plan(
         settings = get_admin_settings(db, target_admin_id)
         if settings and settings.traffic_limit is not None:
             if not settings.oversell_allowed:
+                if dbuser.next_plan.data_limit is None or dbuser.next_plan.data_limit <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot activate next plan with unlimited data when overselling is disabled for your account."
+                    )
                 old_limit = dbuser.data_limit or 0
-                next_limit = dbuser.next_plan.data_limit if dbuser.next_plan else old_limit
-                delta = (next_limit - old_limit) if next_limit is not None else 0
+                remaining = max(0, old_limit - (dbuser.used_traffic or 0)) if dbuser.next_plan.add_remaining_traffic else 0
+                next_limit = (dbuser.next_plan.data_limit or 0) + remaining
+                delta = next_limit - old_limit
                 if delta > 0:
                     allocated = get_admin_allocated_traffic(db, target_admin_id, for_update=True)
                     if allocated + delta > settings.traffic_limit:

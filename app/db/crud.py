@@ -483,7 +483,12 @@ def remove_users(db: Session, dbusers: List[User]):
             affected_admin_ids.add(dbuser.admin_id)
             if dbuser.used_traffic:
                 admin_traffic_to_increment[dbuser.admin_id] += dbuser.used_traffic
-        db.delete(dbuser)
+
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id.in_(user_ids)).delete(synchronize_session=False)
+    except Exception:
+        pass
 
     for aid, traffic in admin_traffic_to_increment.items():
         try:
@@ -492,11 +497,8 @@ def remove_users(db: Session, dbusers: List[User]):
         except Exception:
             pass
 
-    try:
-        from app.marzyar.models import MarzyarUserLock
-        db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id.in_(user_ids)).delete(synchronize_session=False)
-    except Exception:
-        pass
+    for dbuser in dbusers:
+        db.delete(dbuser)
 
     db.commit()
 
@@ -651,7 +653,7 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
         from app.marzyar.models import MarzyarUserLock
         lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
         if lock:
-            if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+            if lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value):
                 lock.original_status = UserStatus.active.value
             dbuser.status = UserStatus.disabled
         else:
@@ -731,6 +733,16 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
             dbuser.expire = dbuser.next_plan.expire
     else:
         dbuser.expire = None
+
+    if dbuser.next_plan.data_limit is not None:
+        new_data_limit = dbuser.next_plan.data_limit or None
+        if new_data_limit is not None and remaining_traffic > 0:
+            new_data_limit += remaining_traffic
+        elif new_data_limit is None and remaining_traffic > 0:
+            new_data_limit = remaining_traffic
+        dbuser.data_limit = new_data_limit
+    elif remaining_traffic > 0 and dbuser.data_limit:
+        dbuser.data_limit += remaining_traffic
 
     dbuser.used_traffic = 0
     db.delete(dbuser.next_plan)
@@ -1220,7 +1232,10 @@ def remove_admin(db: Session, dbadmin: Admin) -> Admin:
         locked_ids = marzyar_crud.get_locked_user_ids_for_admin(db, dbadmin.id)
         if locked_ids:
             unlock_and_restore_users(db, list(locked_ids))
-        db.query(MarzyarAdminSettings).filter(MarzyarAdminSettings.admin_id == dbadmin.id).delete(synchronize_session=False)
+        if hasattr(dbadmin, 'marzyar_settings') and dbadmin.marzyar_settings:
+            db.delete(dbadmin.marzyar_settings)
+        else:
+            db.query(MarzyarAdminSettings).filter(MarzyarAdminSettings.admin_id == dbadmin.id).delete(synchronize_session=False)
     except Exception:
         pass
 

@@ -29,7 +29,7 @@ class MarzyarAdminSettings(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    admin = relationship("Admin", backref=backref("marzyar_settings", uselist=False), foreign_keys=[admin_id])
+    admin = relationship("Admin", backref=backref("marzyar_settings", uselist=False, passive_deletes=True), foreign_keys=[admin_id])
 
 
 class MarzyarUserLock(Base):
@@ -45,5 +45,5 @@ class MarzyarUserLock(Base):
     lock_reason = Column(String(64), default="admin_quota_exceeded")
     original_status = Column(String(32), default="active", nullable=False)
 
-    user = relationship("User", backref=backref("marzyar_lock", uselist=False), foreign_keys=[user_id])
-    admin = relationship("Admin", backref="marzyar_user_locks", foreign_keys=[admin_id])
+    user = relationship("User", backref=backref("marzyar_lock", uselist=False, passive_deletes=True), foreign_keys=[user_id])
+    admin = relationship("Admin", backref=backref("marzyar_user_locks", passive_deletes=True), foreign_keys=[admin_id])

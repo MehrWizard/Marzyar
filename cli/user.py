@@ -42,7 +42,7 @@ def list_users(
                 (
                     str(user.id),
                     user.username,
-                    user.status.value,
+                    "locked" if user.is_locked else user.status.value,
                     readable_size(user.used_traffic),
                     readable_size(user.data_limit) if user.data_limit else "Unlimited",
                     user.data_limit_reset_strategy.value,

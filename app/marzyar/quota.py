@@ -1,3 +1,4 @@
+from datetime import datetime
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
@@ -16,7 +17,8 @@ def check_admin_can_create_user(
     db: Session,
     admin: Admin,
     data_limit: Optional[int],
-    inbounds: Optional[Dict[str, List[str]]]
+    inbounds: Optional[Dict[str, List[str]]],
+    next_plan: Optional[Any] = None,
 ) -> None:
     """
     Validate whether an admin is allowed to create a user based on Marzyar limits.
@@ -68,6 +70,11 @@ def check_admin_can_create_user(
                     status_code=400,
                     detail="Cannot create user with unlimited data when overselling is disabled for your account. Please specify a data limit."
                 )
+            if next_plan and (getattr(next_plan, 'data_limit', None) is None or getattr(next_plan, 'data_limit', 0) <= 0):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot specify unlimited data for next plan when overselling is disabled for your account."
+                )
             allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
             if allocated + data_limit > settings.traffic_limit:
                 raise HTTPException(
@@ -92,6 +99,8 @@ def check_admin_can_modify_user(
     new_inbounds: Optional[Dict[str, List[str]]],
     new_status: Optional[UserStatus],
     new_proxies: Optional[Dict[str, Any]] = None,
+    new_expire: Optional[int] = None,
+    new_next_plan: Optional[Any] = None,
 ) -> None:
     """
     Validate modifications to existing users under Marzyar constraints.
@@ -155,9 +164,24 @@ def check_admin_can_modify_user(
         old_limit = target_user.data_limit or 0
         delta = (new_data_limit - old_limit) if new_data_limit is not None else 0
 
+        now_ts = datetime.utcnow().timestamp()
         is_activating = (
             target_user.status not in [UserStatus.active, UserStatus.on_hold]
-            and new_status in [UserStatus.active, UserStatus.on_hold]
+            and (
+                new_status in [UserStatus.active, UserStatus.on_hold]
+                or (
+                    target_user.status == UserStatus.limited
+                    and new_data_limit is not None
+                    and (new_data_limit == 0 or target_user.used_traffic < new_data_limit)
+                    and new_status not in [UserStatus.disabled, UserStatus.expired]
+                )
+                or (
+                    target_user.status == UserStatus.expired
+                    and new_expire is not None
+                    and (new_expire == 0 or new_expire > now_ts)
+                    and new_status not in [UserStatus.disabled, UserStatus.expired]
+                )
+            )
         )
 
         if not settings.oversell_allowed:
@@ -165,6 +189,12 @@ def check_admin_can_modify_user(
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
+                )
+
+            if new_next_plan and (getattr(new_next_plan, 'data_limit', None) is None or getattr(new_next_plan, 'data_limit', 0) <= 0):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot specify unlimited data for next plan when overselling is disabled for your account."
                 )
 
             if delta > 0:

@@ -204,8 +204,11 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
                     target_status = UserStatus.expired
                 elif dbuser.data_limit and dbuser.used_traffic >= dbuser.data_limit:
                     target_status = UserStatus.limited
-            elif target_status == UserStatus.limited and dbuser.expire and dbuser.expire <= now_ts:
-                target_status = UserStatus.expired
+            elif target_status == UserStatus.limited:
+                if dbuser.expire and dbuser.expire <= now_ts:
+                    target_status = UserStatus.expired
+                elif not dbuser.data_limit or dbuser.used_traffic < dbuser.data_limit:
+                    target_status = UserStatus.active
 
             dbuser.status = target_status
             dbuser.marzyar_lock = None
