@@ -168,7 +168,7 @@ def audit_admin_quotas(db: Session) -> None:
                 .all()
             )
             if active_users:
-                to_lock = [u.id for u in active_users]
+                to_lock = [(u.id, u.status.value) for u in active_users]
                 crud.lock_users(db, to_lock, s.admin_id, reason="admin_quota_exceeded")
                 for u in active_users:
                     try:
@@ -177,7 +177,7 @@ def audit_admin_quotas(db: Session) -> None:
                         logger.warning(f"[Marzyar] Error removing locked user {u.username} from Xray: {e}")
                 logger.warning(
                     f"[Marzyar] Admin ID {s.admin_id} exceeded quota ({s.traffic_limit} bytes). "
-                    f"Locked {len(to_lock)} active user(s)."
+                    f"Locked {len(to_lock)} user(s) (set status to disabled and recorded original status)."
                 )
         else:
             # Under quota: unlock users if currently locked
@@ -186,16 +186,12 @@ def audit_admin_quotas(db: Session) -> None:
 
 
 def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:
-    """Helper to unlock users and re-attach active ones to Xray."""
-    crud.unlock_users(db, user_ids)
-    restored_users = (
-        db.query(User)
-        .filter(User.id.in_(user_ids), User.status == UserStatus.active)
-        .all()
-    )
-    for u in restored_users:
-        try:
-            xray.operations.add_user(u)
-        except Exception as e:
-            logger.warning(f"[Marzyar] Error restoring unlocked user {u.username} to Xray: {e}")
-    logger.info(f"[Marzyar] Unlocked and restored {len(restored_users)} user(s) to Xray.")
+    """Helper to unlock users, restore their original status, and re-attach active ones to Xray."""
+    restored = crud.unlock_users(db, user_ids)
+    for u, orig_status in restored:
+        if orig_status == UserStatus.active.value:
+            try:
+                xray.operations.add_user(u)
+            except Exception as e:
+                logger.warning(f"[Marzyar] Error restoring unlocked user {u.username} to Xray: {e}")
+    logger.info(f"[Marzyar] Unlocked and restored {len(restored)} user(s) to original status.")

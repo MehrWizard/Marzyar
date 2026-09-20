@@ -43,6 +43,7 @@ class MarzyarUserLock(Base):
     admin_id = Column(Integer, ForeignKey("admins.id", ondelete="CASCADE"), index=True)
     locked_at = Column(DateTime, default=datetime.utcnow)
     lock_reason = Column(String(64), default="admin_quota_exceeded")
+    original_status = Column(String(32), default="active", nullable=False)
 
     user = relationship("User", backref="marzyar_lock", foreign_keys=[user_id])
     admin = relationship("Admin", backref="marzyar_user_locks", foreign_keys=[admin_id])

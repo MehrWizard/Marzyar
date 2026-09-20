@@ -18,6 +18,13 @@ def init_marzyar_db() -> None:
     try:
         MarzyarAdminSettings.__table__.create(engine, checkfirst=True)
         MarzyarUserLock.__table__.create(engine, checkfirst=True)
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            try:
+                conn.execute(text("ALTER TABLE marzyar_user_locks ADD COLUMN original_status VARCHAR(32) DEFAULT 'active' NOT NULL"))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists or freshly created
         logger.info("[Marzyar] Database tables verified and initialized safely.")
     except Exception as e:
         logger.error(f"[Marzyar] Failed to initialize Marzyar database tables: {e}")
@@ -109,28 +116,35 @@ def get_locked_users(db: Session) -> List[Tuple[MarzyarUserLock, User, Admin]]:
 
 def lock_users(
     db: Session,
-    user_ids: List[int],
+    users: List[Tuple[int, str]],
     admin_id: int,
     reason: str = "admin_quota_exceeded"
 ) -> List[int]:
     """
-    Lock a list of users under an admin without touching user.status in the users table.
+    Lock a list of users under an admin, recording their original_status in marzyar_user_locks
+    and setting user.status to disabled in the users table so Xray and client subscriptions treat them as disabled.
     """
-    if not user_ids:
+    if not users:
         return []
+
+    from app.models.user import UserStatus
 
     existing = set(get_locked_user_ids_for_admin(db, admin_id))
     new_locked = []
 
-    for uid in user_ids:
+    for uid, orig_status in users:
         if uid not in existing:
             lock_entry = MarzyarUserLock(
                 user_id=uid,
                 admin_id=admin_id,
                 locked_at=datetime.utcnow(),
-                lock_reason=reason
+                lock_reason=reason,
+                original_status=orig_status,
             )
             db.add(lock_entry)
+            dbuser = db.query(User).filter(User.id == uid).first()
+            if dbuser:
+                dbuser.status = UserStatus.disabled
             new_locked.append(uid)
 
     if new_locked:
@@ -138,21 +152,37 @@ def lock_users(
     return new_locked
 
 
-def unlock_users(db: Session, user_ids: List[int]) -> List[int]:
+def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     """
-    Remove users from lock table, lifting their lock.
+    Remove users from lock table, restoring their original_status in the users table.
+    Returns list of (User, original_status).
     """
     if not user_ids:
         return []
 
-    deleted_count = (
+    from app.models.user import UserStatus
+
+    locks = (
         db.query(MarzyarUserLock)
         .filter(MarzyarUserLock.user_id.in_(user_ids))
-        .delete(synchronize_session=False)
+        .all()
     )
-    if deleted_count:
+
+    restored = []
+    for lock in locks:
+        dbuser = db.query(User).filter(User.id == lock.user_id).first()
+        if dbuser:
+            try:
+                target_status = UserStatus(lock.original_status)
+            except Exception:
+                target_status = UserStatus.active
+            dbuser.status = target_status
+            restored.append((dbuser, lock.original_status))
+        db.delete(lock)
+
+    if restored:
         db.commit()
-    return user_ids
+    return restored
 
 
 def get_admin_user_count(db: Session, admin_id: int) -> int:

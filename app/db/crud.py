@@ -435,8 +435,27 @@ def remove_user(db: Session, dbuser: User) -> User:
     Returns:
         User: The removed user object.
     """
+    admin_id = dbuser.admin_id
+    used_traffic = dbuser.used_traffic
+
+    try:
+        from app.marzyar import crud as marzyar_crud
+        if admin_id and used_traffic:
+            marzyar_crud.increment_admin_quota_counter(db, admin_id, used_traffic)
+        marzyar_crud.unlock_users(db, [dbuser.id])
+    except Exception:
+        pass
+
     db.delete(dbuser)
     db.commit()
+
+    if admin_id:
+        try:
+            from app.marzyar import quota as marzyar_quota
+            marzyar_quota.audit_admin_quotas(db)
+        except Exception:
+            pass
+
     return dbuser
 
 
@@ -448,9 +467,35 @@ def remove_users(db: Session, dbusers: List[User]):
         db (Session): Database session.
         dbusers (List[User]): List of user objects to be removed.
     """
+    affected_admin_ids = set()
+    user_ids = []
     for dbuser in dbusers:
+        user_ids.append(dbuser.id)
+        if dbuser.admin_id:
+            affected_admin_ids.add(dbuser.admin_id)
+            if dbuser.used_traffic:
+                try:
+                    from app.marzyar import crud as marzyar_crud
+                    marzyar_crud.increment_admin_quota_counter(db, dbuser.admin_id, dbuser.used_traffic)
+                except Exception:
+                    pass
         db.delete(dbuser)
+
+    try:
+        from app.marzyar import crud as marzyar_crud
+        marzyar_crud.unlock_users(db, user_ids)
+    except Exception:
+        pass
+
     db.commit()
+
+    if affected_admin_ids:
+        try:
+            from app.marzyar import quota as marzyar_quota
+            marzyar_quota.audit_admin_quotas(db)
+        except Exception:
+            pass
+
     return
 
 
