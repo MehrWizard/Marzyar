@@ -133,30 +133,37 @@ def check_admin_can_modify_user(
 
     # 3. Check traffic quota
     if settings.traffic_limit is not None:
+        old_limit = target_user.data_limit or 0
+        delta = (new_data_limit - old_limit) if new_data_limit is not None else 0
+
+        is_activating = (
+            target_user.status not in [UserStatus.active, UserStatus.on_hold]
+            and new_status in [UserStatus.active, UserStatus.on_hold]
+        )
+
         if not settings.oversell_allowed:
-            if new_data_limit is not None:
-                if new_data_limit <= 0:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
-                    )
-                old_limit = target_user.data_limit or 0
-                delta = new_data_limit - old_limit
-                if delta > 0:
-                    allocated = crud.get_admin_allocated_traffic(db, admin.id)
-                    if allocated + delta > settings.traffic_limit:
-                        raise HTTPException(
-                            status_code=403,
-                            detail=f"Admin traffic quota exceeded. New allocated total ({allocated + delta} bytes) exceeds limit ({settings.traffic_limit} bytes)."
-                        )
-            if new_status in [UserStatus.active, UserStatus.on_hold]:
+            if new_data_limit is not None and new_data_limit <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
+                )
+
+            if delta > 0:
                 allocated = crud.get_admin_allocated_traffic(db, admin.id)
-                if allocated > settings.traffic_limit:
+                if allocated + delta > settings.traffic_limit:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Admin traffic quota exceeded. New allocated total ({allocated + delta} bytes) exceeds limit ({settings.traffic_limit} bytes)."
+                    )
+
+            if is_activating:
+                allocated = crud.get_admin_allocated_traffic(db, admin.id)
+                if allocated + delta > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,
                         detail="Admin allocated traffic quota is currently exceeded. Cannot activate users until quota is renewed or allocated limits reduced."
                     )
-        elif settings.oversell_allowed and new_status in [UserStatus.active, UserStatus.on_hold]:
+        elif settings.oversell_allowed and is_activating:
             consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings)
             if consumed >= settings.traffic_limit:
                 raise HTTPException(

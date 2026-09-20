@@ -852,6 +852,16 @@ def activate_all_disabled_users(db: Session, admin: Optional[Admin] = None):
             User.status == UserStatus.disabled, User.expire.is_(
                 None), User.on_hold_expire_duration.isnot(None), User.online_at.is_(None)
         ))
+
+    try:
+        from app.marzyar.crud import get_locked_user_ids
+        locked_ids = get_locked_user_ids(db)
+        if locked_ids:
+            query_for_active_users = query_for_active_users.filter(~User.id.in_(locked_ids))
+            query_for_on_hold_users = query_for_on_hold_users.filter(~User.id.in_(locked_ids))
+    except Exception:
+        pass
+
     if admin:
         query_for_active_users = query_for_active_users.filter(User.admin == admin)
         query_for_on_hold_users = query_for_on_hold_users.filter(User.admin == admin)
@@ -1110,6 +1120,11 @@ def create_admin(db: Session, admin: AdminCreate) -> Admin:
     db.add(dbadmin)
     db.commit()
     db.refresh(dbadmin)
+    try:
+        from app.marzyar.crud import get_or_create_admin_settings
+        get_or_create_admin_settings(db, dbadmin.id)
+    except Exception:
+        pass
     return dbadmin
 
 
