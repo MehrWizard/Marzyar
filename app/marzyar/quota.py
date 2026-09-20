@@ -1,5 +1,5 @@
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -7,7 +7,7 @@ from app import logger, xray
 from app.db.models import Admin, User
 from app.models.user import UserStatus
 from app.marzyar import crud
-from app.marzyar.models import MarzyarAdminSettings
+from app.marzyar.models import MarzyarAdminSettings, MarzyarUserLock
 
 _audit_lock = threading.Lock()
 
@@ -185,11 +185,19 @@ def audit_admin_quotas(db: Session) -> None:
 
         for s in all_settings:
             try:
+                # Sudo admins are completely exempt from quotas and locking
+                admin = db.query(Admin).filter(Admin.id == s.admin_id).first()
+                if not admin or admin.is_sudo:
+                    locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
+                    if locked_ids:
+                        unlock_and_restore_users(db, list(locked_ids))
+                    continue
+
                 if s.traffic_limit is None:
                     # Unlimited quota: unlock any previously locked users if they exist
                     locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
                     if locked_ids:
-                        _unlock_and_restore_users(db, list(locked_ids))
+                        unlock_and_restore_users(db, list(locked_ids))
                     continue
 
                 # Evaluate quota condition
@@ -227,12 +235,26 @@ def audit_admin_quotas(db: Session) -> None:
                 else:
                     # Under quota: unlock users if currently locked
                     if currently_locked:
-                        _unlock_and_restore_users(db, list(currently_locked))
+                        unlock_and_restore_users(db, list(currently_locked))
             except Exception as e:
                 logger.error(f"[Marzyar] Error during quota audit for admin ID {s.admin_id}: {e}")
 
+        # Clean up any orphaned locks where admin was deleted or no longer in settings
+        try:
+            active_settings_admin_ids = {s.admin_id for s in all_settings}
+            orphaned_locks = (
+                db.query(MarzyarUserLock.user_id)
+                .filter(~MarzyarUserLock.admin_id.in_(active_settings_admin_ids))
+                .all()
+            )
+            if orphaned_locks:
+                orphaned_ids = [r[0] for r in orphaned_locks]
+                unlock_and_restore_users(db, orphaned_ids)
+        except Exception as e:
+            logger.error(f"[Marzyar] Error cleaning up orphaned locks: {e}")
 
-def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:
+
+def unlock_and_restore_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     """Helper to unlock users, restore their original status, and re-attach active/on-hold ones to Xray."""
     restored = crud.unlock_users(db, user_ids)
     for u, orig_status in restored:
@@ -242,3 +264,7 @@ def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:
             except Exception as e:
                 logger.warning(f"[Marzyar] Error restoring unlocked user {u.username} to Xray: {e}")
     logger.info(f"[Marzyar] Unlocked and restored {len(restored)} user(s) to original status.")
+    return restored
+
+
+_unlock_and_restore_users = unlock_and_restore_users

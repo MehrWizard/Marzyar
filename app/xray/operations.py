@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import logger, xray
 from app.db import GetDB, crud
 from app.models.node import NodeStatus
-from app.models.user import UserResponse
+from app.models.user import UserResponse, UserStatus
 from app.utils.concurrency import threaded_function
 from app.xray.node import XRayNode
 from xray_api import XRay as XRayAPI
@@ -58,6 +58,8 @@ def _alter_inbound_user(api: XRayAPI, inbound_tag: str, account: Account):
 
 def add_user(dbuser: "DBUser"):
     user = UserResponse.model_validate(dbuser)
+    if user.status not in [UserStatus.active, UserStatus.on_hold] or user.is_locked:
+        return
     email = f"{dbuser.id}.{dbuser.username}"
 
     for proxy_type, inbound_tags in user.inbounds.items():
@@ -102,6 +104,9 @@ def remove_user(dbuser: "DBUser"):
 
 def update_user(dbuser: "DBUser"):
     user = UserResponse.model_validate(dbuser)
+    if user.status not in [UserStatus.active, UserStatus.on_hold] or user.is_locked:
+        remove_user(dbuser)
+        return
     email = f"{dbuser.id}.{dbuser.username}"
 
     active_inbounds = []

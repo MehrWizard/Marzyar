@@ -1013,9 +1013,10 @@ def set_owner(db: Session, dbuser: User, admin: Admin) -> User:
     quota auditing can re-evaluate them cleanly under the new admin's limits.
     """
     try:
-        from app.marzyar import crud as marzyar_crud
-        if marzyar_crud.is_user_locked(db, dbuser.id):
-            marzyar_crud.unlock_users(db, [dbuser.id])
+        from app.marzyar.quota import unlock_and_restore_users
+        from app.marzyar.crud import is_user_locked
+        if is_user_locked(db, dbuser.id):
+            unlock_and_restore_users(db, [dbuser.id])
     except Exception:
         pass
 
@@ -1188,11 +1189,12 @@ def remove_admin(db: Session, dbadmin: Admin) -> Admin:
     Cleanly unlocks any locked users belonging to this admin and removes Marzyar settings before removal.
     """
     try:
+        from app.marzyar.quota import unlock_and_restore_users
         from app.marzyar import crud as marzyar_crud
         from app.marzyar.models import MarzyarAdminSettings
         locked_ids = marzyar_crud.get_locked_user_ids_for_admin(db, dbadmin.id)
         if locked_ids:
-            marzyar_crud.unlock_users(db, list(locked_ids))
+            unlock_and_restore_users(db, list(locked_ids))
         db.query(MarzyarAdminSettings).filter(MarzyarAdminSettings.admin_id == dbadmin.id).delete(synchronize_session=False)
     except Exception:
         pass

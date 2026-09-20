@@ -71,8 +71,18 @@ def add_user(
         db.rollback()
         raise HTTPException(status_code=409, detail="User already exists")
 
-    bg.add_task(xray.operations.add_user, dbuser=dbuser)
+    try:
+        from app.marzyar import quota as marzyar_quota
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
+
+    db.refresh(dbuser)
     user = UserResponse.model_validate(dbuser)
+
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        bg.add_task(xray.operations.add_user, dbuser=dbuser)
+
     report.user_created(user=user, user_id=dbuser.id, by=admin, user_admin=dbuser.admin)
     logger.info(f'New user "{dbuser.username}" added')
     return user
@@ -130,20 +140,22 @@ def modify_user(
 
     old_status = dbuser.status
     dbuser = crud.update_user(db, dbuser, modified_user)
-    user = UserResponse.model_validate(dbuser)
-
-    if user.status in [UserStatus.active, UserStatus.on_hold]:
-        bg.add_task(xray.operations.update_user, dbuser=dbuser)
-    else:
-        bg.add_task(xray.operations.remove_user, dbuser=dbuser)
-
-    bg.add_task(report.user_updated, user=user, user_admin=dbuser.admin, by=admin)
 
     try:
         from app.marzyar import quota as marzyar_quota
         marzyar_quota.audit_admin_quotas(db)
     except Exception:
         pass
+
+    db.refresh(dbuser)
+    user = UserResponse.model_validate(dbuser)
+
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        bg.add_task(xray.operations.update_user, dbuser=dbuser)
+    else:
+        bg.add_task(xray.operations.remove_user, dbuser=dbuser)
+
+    bg.add_task(report.user_updated, user=user, user_admin=dbuser.admin, by=admin)
 
     logger.info(f'User "{user.username}" modified')
 
@@ -199,10 +211,21 @@ def reset_user_data_usage(
             )
 
     dbuser = crud.reset_user_data_usage(db=db, dbuser=dbuser)
-    if dbuser.status in [UserStatus.active, UserStatus.on_hold]:
-        bg.add_task(xray.operations.add_user, dbuser=dbuser)
 
+    try:
+        from app.marzyar import quota as marzyar_quota
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
+
+    db.refresh(dbuser)
     user = UserResponse.model_validate(dbuser)
+
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        bg.add_task(xray.operations.add_user, dbuser=dbuser)
+    else:
+        bg.add_task(xray.operations.remove_user, dbuser=dbuser)
+
     bg.add_task(
         report.user_data_usage_reset, user=user, user_admin=dbuser.admin, by=admin
     )
@@ -326,19 +349,23 @@ def active_next_plan(
             detail="User doesn't have next plan",
         )
 
-    if dbuser.status in [UserStatus.active, UserStatus.on_hold]:
-        bg.add_task(xray.operations.add_user, dbuser=dbuser)
-
-    user = UserResponse.model_validate(dbuser)
-    bg.add_task(
-        report.user_data_reset_by_next, user=user, user_admin=dbuser.admin,
-    )
-
     try:
         from app.marzyar import quota as marzyar_quota
         marzyar_quota.audit_admin_quotas(db)
     except Exception:
         pass
+
+    db.refresh(dbuser)
+    user = UserResponse.model_validate(dbuser)
+
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        bg.add_task(xray.operations.add_user, dbuser=dbuser)
+    else:
+        bg.add_task(xray.operations.remove_user, dbuser=dbuser)
+
+    bg.add_task(
+        report.user_data_reset_by_next, user=user, user_admin=dbuser.admin,
+    )
 
     logger.info(f'User "{dbuser.username}"\'s usage was reset by next plan')
     return dbuser
@@ -375,13 +402,20 @@ def set_owner(
         raise HTTPException(status_code=404, detail="Admin not found")
 
     dbuser = crud.set_owner(db, dbuser, new_admin)
-    user = UserResponse.model_validate(dbuser)
 
     try:
         from app.marzyar import quota as marzyar_quota
         marzyar_quota.audit_admin_quotas(db)
     except Exception:
         pass
+
+    db.refresh(dbuser)
+    user = UserResponse.model_validate(dbuser)
+
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
+        xray.operations.add_user(dbuser)
+    else:
+        xray.operations.remove_user(dbuser)
 
     logger.info(f'{user.username}"owner successfully set to{admin.username}')
 

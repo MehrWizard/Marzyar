@@ -149,6 +149,13 @@ class User(Base):
         try:
             return bool(self.marzyar_lock)
         except Exception:
+            pass
+        try:
+            from app.db import GetDB
+            from app.marzyar.models import MarzyarUserLock
+            with GetDB() as db:
+                return db.query(MarzyarUserLock.user_id).filter(MarzyarUserLock.user_id == self.id).first() is not None
+        except Exception:
             return False
 
 
