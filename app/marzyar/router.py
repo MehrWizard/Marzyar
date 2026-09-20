@@ -27,10 +27,12 @@ def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdm
 
     is_quota_exceeded = False
     if s.traffic_limit is not None:
-        if s.oversell_allowed:
-            is_quota_exceeded = consumed >= s.traffic_limit
-        else:
-            is_quota_exceeded = allocated > s.traffic_limit
+        # Consumed limit is enforced universally regardless of oversell mode
+        if consumed >= s.traffic_limit:
+            is_quota_exceeded = True
+        elif not s.oversell_allowed and allocated > s.traffic_limit:
+            # Strict mode: also check allocated
+            is_quota_exceeded = True
 
     if admin.is_sudo:
         is_user_limit_exceeded = False
@@ -144,10 +146,12 @@ def get_my_limits(
     is_user_limit_exceeded = bool(s.users_limit is not None and u_count >= s.users_limit)
     is_quota_exceeded = False
     if s.traffic_limit is not None:
-        if s.oversell_allowed:
-            is_quota_exceeded = consumed >= s.traffic_limit
-        else:
-            is_quota_exceeded = allocated > s.traffic_limit
+        # Consumed limit is enforced universally regardless of oversell mode
+        if consumed >= s.traffic_limit:
+            is_quota_exceeded = True
+        elif not s.oversell_allowed and allocated > s.traffic_limit:
+            # Strict mode: also check allocated
+            is_quota_exceeded = True
 
     if current_admin.is_sudo:
         is_user_limit_exceeded = False
