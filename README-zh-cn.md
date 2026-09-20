@@ -1,30 +1,30 @@
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzdar Logo">
+      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzyar Logo">
     </picture>
   </a>
 </p>
 
-<h1 align="center">Marzdar</h1>
+<h1 align="center">Marzyar</h1>
 
 <p align="center">
-  基于 <a href="https://github.com/gozargah/marzban">Marzban</a> 现有 API 能力、致力于补全网页管理界面的 100% 兼容无缝替代分支。
+  基于 <a href="https://github.com/gozargah/marzban">Marzban</a> 与 <a href="https://github.com/MehrWizard/Marzdar">Marzdar</a> 的 100% 兼容无缝分支，具备完整网页 UI、原生分销商配额管理、用户数上限限制、超售模式与入站协议控制。
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar/actions/workflows/build.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzdar/build.yml?style=flat-square&logo=github" alt="Build Status" />
+  <a href="https://github.com/MehrWizard/Marzyar/actions/workflows/build.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzyar/build.yml?style=flat-square&logo=github" alt="Build Status" />
   </a>
-  <a href="https://hub.docker.com/r/mehrwizard/marzdar" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzdar?style=flat-square&logo=docker" alt="Docker Pulls" />
+  <a href="https://hub.docker.com/r/mehrwizard/marzyar" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzyar?style=flat-square&logo=docker" alt="Docker Pulls" />
   </a>
-  <a href="https://github.com/MehrWizard/Marzdar/stargazers">
-    <img src="https://img.shields.io/github/stars/MehrWizard/Marzdar?style=flat-square&logo=github" alt="Stars" />
+  <a href="https://github.com/MehrWizard/Marzyar/stargazers">
+    <img src="https://img.shields.io/github/stars/MehrWizard/Marzyar?style=flat-square&logo=github" alt="Stars" />
   </a>
   <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/MehrWizard/Marzdar?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/github/license/MehrWizard/Marzyar?style=flat-square" alt="License" />
   </a>
   <a href="https://t.me/MehrRoom" target="_blank">
     <img src="https://img.shields.io/badge/Telegram-Group-blue?style=flat-square&logo=telegram" alt="Telegram Group" />
@@ -45,69 +45,58 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
-    <img src="https://github.com/MehrWizard/Marzdar/raw/master/docs/assets/preview.png" alt="Marzdar Preview" width="800" height="auto">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
+    <img src="https://github.com/MehrWizard/Marzyar/raw/master/docs/assets/preview.png" alt="Marzyar Preview" width="800" height="auto">
   </a>
 </p>
 
 ---
 
-## 什么是 Marzdar？
+## 什么是 Marzyar？
 
-**Marzdar** 是 [Marzban](https://github.com/gozargah/marzban) 的无缝直接替代版本。
+**Marzyar** 是 **Marzdar** 与 **Marzban** 的分销商原生演进版本。
 
-原始的 Marzban 在后端已经实现了许多强大的 REST API 接口与数据库功能，但在前端面板中一直缺乏对应的按钮与控制界面。**Marzdar 旨在补全这部分用户界面**，在不破坏任何兼容性与核心架构的前提下，让用户能直接在网页中使用所有后端能力。
+不同于修改核心表结构的第三方分支，Marzyar **绝不破坏基础数据库结构** (`admins`, `users`)，不增加有风险的 Alembic 迁移，确保在 Marzban、Marzdar 与 Marzyar 之间 **100% 双向安全互换**：
 
----
-
-## Marzban 对比 Marzdar
-
-| 功能模块 | Marzban (原版) | Marzdar |
-| :--- | :--- | :--- |
-| **兼容性** | 标准 Marzban | 100% 无缝兼容（完全相同的数据库、CLI 与核心） |
-| **管理员管理** | 仅限 CLI / API | 完整网页 UI（创建、编辑、删除、Sudo、用量统计及重置） |
-| **用户模板** | 仅限 API | 完整网页 UI（模板管理 + 创建用户时一键自动预填） |
-| **续费排队计划 (Next Plan)** | 仅限 API (`next_plan`) | 完整网页 UI（配置排队计划 + 支持一键立即生效） |
-| **清理到期用户** | 手动 SQL / API | 安全且支持按时间范围筛选的批量清理弹窗 |
-| **转移用户所有权** | 仅限 API | 网页端管理员之间直接转移用户归属 |
-| **主题与配色** | 固定浅色 / 深色 | 浅色、深色及纯黑 OLED 模式 + 8 种强调配色方案 |
-| **版本迁移** | - | 仅需修改 Docker 镜像名称单行配置 |
+1. **用户账户数量上限 (Slots)**：限制每个分销商管理员可创建的用户账号数量。
+2. **流量配额与超售管理 (Oversell)**：
+   - **严格模式（禁止超售）**：配额限制分销商名下所有用户分配的额度总和 ($\sum \text{user.data\_limit} \le \text{traffic\_limit}$)。
+   - **超售模式**：配额限制实际已消耗的总流量 ($\sum \text{user.used\_traffic} + \text{历史重置} \le \text{traffic\_limit}$)。
+   - **安全防绕过计量**：普通管理员重置用户流量并不能重置其自身的已用配额，重置的流量会安全累加至分销商配额计数器中。
+3. **智能锁定状态机 (Locked State Machine)**：
+   - 当分销商流量配额耗尽时，其活跃用户将被无损标记为锁定状态，并立即从 Xray 入站断开（即时断网）。
+   - 核心 `users` 表数据完全保持完好。
+   - 当超级管理员（Sudo）调大或重置分销商配额后，所有锁定用户立即解锁并自动重新接入 Xray。
+4. **允许的入站协议限制**：可限制特定分销商仅能使用指定的协议或节点入站。
+5. **顶部导航实时配额组件**：分销商登录后可在面板顶部直观查看剩余名额与已用流量配额。
 
 ---
 
-## 项目范畴与定位
+## 功能对比
 
-### ✅ Marzdar 致力于实现的
-- **补全网页用户界面**：为后端已具备的 API 接口提供优雅、清晰的可视化操作组件。
-- **保持 100% 互换性**：绝不引入破坏数据库结构、环境配置或命令行工具的变更。随时可以在 Marzban 与 Marzdar 之间无缝切换。
-- **优化 UI/UX 体验**：提供现代主题（浅色、深色、纯黑 OLED）、强调色调色板，并保持英语、波斯语、俄语与中文的完整本地化对齐。
-
-### ❌ 不在计划范围内（非本项目范畴）
-- **绝不破坏后端架构**：不重构后端核心引擎或篡改基础数据库表结构。
-- **不增加不兼容协议**：遵循标准 Xray-core 及 Marzban 协议体系规范。
-- **杜绝冗余臃肿功能**：任何偏离 Marzban 初衷或影响互换性的特性都不会被接纳。
+| 功能模块 | Marzban (原版) | Marzdar | Marzyar |
+| :--- | :--- | :--- | :--- |
+| **兼容性与回滚** | 标准 | 100% 无缝兼容 | 100% 无缝兼容（核心表零改动） |
+| **完整网页 UI** | ❌ 缺失多项功能 | ✅ 完整补齐 | ✅ 完整补齐 |
+| **分销商用户名额上限** | ❌ 无 | ❌ 无 | ✅ 原生支持 |
+| **流量配额与超售模式** | ❌ 无 | ❌ 无 | ✅ 原生支持（不可绕过） |
+| **超额自动断网锁定** | ❌ 无 | ❌ 无 | ✅ 实时从 Xray 断开/恢复 |
+| **限制分销商入站协议** | ❌ 无 | ❌ 无 | ✅ 原生支持 |
+| **安全回滚至 Marzban** | - | ✅ 安全 | ✅ 100% 安全（无自定义 Alembic 破坏） |
 
 ---
 
 ## 安装与迁移配置
 
-在安装原版 Marzban 后，仅需将 `docker-compose.yml` 中的镜像替换为 Marzdar：
+如需从 Marzban 或 Marzdar 切换到 Marzyar，仅需修改 `docker-compose.yml` 中的镜像：
 
-原配置：
 ```yaml
 services:  
   marzban:  
-    image: gozargah/marzban:latest
+    image: mehrwizard/marzyar:latest
 ```
 
-替换为：
-```yaml
-services:  
-  marzban:  
-    image: mehrwizard/marzdar:latest
-```
-
-最后执行 `marzban update` 即可完成 `marzdar` 的配置升级：
+随后执行更新：
 ```bash
 marzban update
 ```
@@ -116,7 +105,7 @@ marzban update
 
 ## 赞助支持 (Donation)
 
-如果您觉得 Marzdar 对您有所帮助并希望支持项目的持续开发：
+如果您觉得 Marzyar 对您有所帮助：
 
 - [通过 MehrNet 支付网关赞助](https://gateway.mehrnet.com/product/1DE5C11019E2)
 
@@ -124,4 +113,4 @@ marzban update
 
 ## 开源协议
 
-Marzdar 遵循 [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE) 开源协议。
+Marzyar 遵循 [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE) 开源协议。

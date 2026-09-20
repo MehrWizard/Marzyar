@@ -1,6 +1,6 @@
 services:
   marzban:
-    image: mehrwizard/marzdar:latest
+    image: mehrwizard/marzyar:latest
     restart: always
     env_file: .env
     network_mode: host

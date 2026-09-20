@@ -52,4 +52,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            mehrwizard/marzdar:${{ github.ref_name }}
+            mehrwizard/marzyar:${{ github.ref_name }}

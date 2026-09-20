@@ -1,30 +1,30 @@
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzdar Logo">
+      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzyar Logo">
     </picture>
   </a>
 </p>
 
-<h1 align="center">Marzdar</h1>
+<h1 align="center">Marzyar</h1>
 
 <p align="center">
-  A 100% compatible drop-in fork of <a href="https://github.com/gozargah/marzban">Marzban</a> dedicated to completing the user interface based on existing backend capabilities.
+  A 100% compatible drop-in fork of <a href="https://github.com/gozargah/marzban">Marzban</a> and <a href="https://github.com/MehrWizard/Marzdar">Marzdar</a> featuring a completed UI plus native reseller quotas, user limits, overselling controls, and inbound restrictions.
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar/actions/workflows/build.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzdar/build.yml?style=flat-square&logo=github" alt="Build Status" />
+  <a href="https://github.com/MehrWizard/Marzyar/actions/workflows/build.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzyar/build.yml?style=flat-square&logo=github" alt="Build Status" />
   </a>
-  <a href="https://hub.docker.com/r/mehrwizard/marzdar" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzdar?style=flat-square&logo=docker" alt="Docker Pulls" />
+  <a href="https://hub.docker.com/r/mehrwizard/marzyar" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzyar?style=flat-square&logo=docker" alt="Docker Pulls" />
   </a>
-  <a href="https://github.com/MehrWizard/Marzdar/stargazers">
-    <img src="https://img.shields.io/github/stars/MehrWizard/Marzdar?style=flat-square&logo=github" alt="Stars" />
+  <a href="https://github.com/MehrWizard/Marzyar/stargazers">
+    <img src="https://img.shields.io/github/stars/MehrWizard/Marzyar?style=flat-square&logo=github" alt="Stars" />
   </a>
   <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/MehrWizard/Marzdar?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/github/license/MehrWizard/Marzyar?style=flat-square" alt="License" />
   </a>
   <a href="https://t.me/MehrRoom" target="_blank">
     <img src="https://img.shields.io/badge/Telegram-Group-blue?style=flat-square&logo=telegram" alt="Telegram Group" />
@@ -45,75 +45,69 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
-    <img src="https://github.com/MehrWizard/Marzdar/raw/master/docs/assets/preview.png" alt="Marzdar Preview" width="800" height="auto">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
+    <img src="https://github.com/MehrWizard/Marzyar/raw/master/docs/assets/preview.png" alt="Marzyar Preview" width="800" height="auto">
   </a>
 </p>
 
 ---
 
-## What is Marzdar?
+## What is Marzyar?
 
-**Marzdar** is a seamless, drop-in replacement for [Marzban](https://github.com/gozargah/marzban).
+**Marzyar** is the reseller-ready evolution of **Marzdar** and **Marzban**.
 
-Upstream Marzban already implemented many essential REST API endpoints and database features that never received corresponding buttons or controls in its web panel. **Marzdar completes this user interface**, unlocking all existing backend functionality without modifying core architecture or breaking compatibility.
+While **Marzdar** focuses on completing the missing user interface elements of upstream Marzban, **Marzyar** integrates native reseller management capabilities directly into the core engine while guaranteeing **zero database schema disruption** and **100% bidirectional migration safety**:
 
----
-
-## Marzban vs. Marzdar
-
-| Area | Marzban (Upstream) | Marzdar |
-| :--- | :--- | :--- |
-| **Compatibility** | Standard Marzban | 100% drop-in compatible (same DB, CLI, and core) |
-| **Admin Management** | CLI / API only | Full web UI (Create, Edit, Delete, Sudo, Usage tracking/reset) |
-| **User Templates** | API only | Full web UI (Manage templates + 1-click prefill when creating users) |
-| **Queued Renewal Plans** | API only (`next_plan`) | Full web UI (Configure next plan + instant manual activation) |
-| **Expired Users Cleanup** | Manual SQL / API only | Safe on-demand bulk deletion modal with date-range filters |
-| **User Ownership** | API only | Web UI transfer ownership between admins |
-| **Theme & Accents** | Fixed Dark / Light | Light, Dark, and true OLED Black + 8 accent color palettes |
-| **Migration** | - | Simple 1-line Docker image swap |
+1. **User Account Limits**: Cap the number of user accounts a reseller admin can create.
+2. **Bandwidth Quotas & Oversell Controls**:
+   - **Strict Mode (No Oversell)**: Admin quota limits the sum of allocated user data limits ($\sum \text{user.data\_limit} \le \text{traffic\_limit}$).
+   - **Oversell Mode**: Admin quota limits total consumed bandwidth ($\sum \text{user.used\_traffic} + \text{resets} \le \text{traffic\_limit}$).
+   - **Non-bypassable Accounting**: Reseller admins cannot reset user traffic counters to escape their own quota; user resets are securely accumulated into the reseller's consumed quota counter.
+3. **The "Locked" State Machine**:
+   - When an admin exhausts their quota, their active users are non-destructively marked as `locked` and detached from Xray inbounds (traffic blocked immediately).
+   - Core `users` table records remain untouched.
+   - When Sudo resets or increases the reseller's quota, all locked users are automatically unlocked and restored to Xray in real-time.
+4. **Allowed Inbounds**: Restrict each reseller to specific protocols and inbounds (e.g., VMess TCP only).
+5. **Dashboard Header Reseller Widget**: Compact live indicators displaying remaining slots and quota for logged-in reseller admins.
 
 ---
 
-## Project Scope
+## Comparison
 
-### ✅ What Marzdar Aims to Do
-- **Complete the User Interface**: Build clean, intuitive web controls for features already supported by the backend API.
-- **Maintain 100% Interchangeability**: Zero breaking changes to the database, configuration files, or CLI commands. You can switch between Marzban and Marzdar at any time.
-- **Enhance UI/UX**: Provide modern themes (Light, Dark, OLED Black), accent palettes, and full localization parity across English, Persian, Russian, and Chinese.
-
-### ❌ What is Not Planned (Out of Scope)
-- **No breaking architectural changes**: We do not rewrite the backend engine or alter core database tables.
-- **No incompatible protocols**: We follow standard Xray-core conventions.
-- **No unnecessary bloat**: Features outside Marzban's original scope that compromise compatibility will not be introduced.
+| Feature | Marzban (Upstream) | Marzdar | Marzyar |
+| :--- | :--- | :--- | :--- |
+| **Compatibility** | Upstream | 100% Drop-in | 100% Drop-in (Zero DB alterations) |
+| **Complete Web UI** | ❌ (CLI/API only for many features) | ✅ Complete | ✅ Complete |
+| **Reseller User Limits** | ❌ None | ❌ None | ✅ Native & UI-managed |
+| **Bandwidth Quota & Oversell** | ❌ None | ❌ None | ✅ Native & Non-bypassable |
+| **Auto-Lock on Over-Quota** | ❌ None | ❌ None | ✅ Real-time Xray detach/restore |
+| **Allowed Inbounds Filtering**| ❌ None | ❌ None | ✅ Admin-level restriction |
+| **Bidirectional Rollback** | Baseline | ✅ Safe | ✅ 100% Safe (No custom Alembic revisions) |
 
 ---
 
 ## Setup & Migration
 
-After installing the original version of Marzban, swap the marzban docker image to marzdar:
+### Migrating from Marzban or Marzdar
 
-From:
+Simply update the image in `docker-compose.yml`:
+
 ```yaml
 services:  
   marzban:  
-    image: gozargah/marzban:latest
+    image: mehrwizard/marzyar:latest
 ```
 
-To:
-```yaml
-services:  
-  marzban:  
-    image: mehrwizard/marzdar:latest
+Then restart:
+```bash
+marzban update
 ```
-
-Finally run `marzban update` in order to complete the `marzdar` setup.
 
 ---
 
 ## Donation
 
-If you find Marzdar useful, you can support its ongoing development:
+If you find Marzyar useful, you can support its ongoing development:
 
 - [Donate via MehrNet Gateway](https://gateway.mehrnet.com/product/1DE5C11019E2)
 
@@ -121,4 +115,4 @@ If you find Marzdar useful, you can support its ongoing development:
 
 ## License
 
-Marzdar is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE).
+Marzyar is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE).

@@ -1,30 +1,30 @@
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzdar Logo">
+      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzyar Logo">
     </picture>
   </a>
 </p>
 
-<h1 align="center">Marzdar</h1>
+<h1 align="center">Marzyar</h1>
 
 <p align="center">
-  Полностью совместимый форк <a href="https://github.com/gozargah/marzban">Marzban</a>, созданный для завершения веб-интерфейса на основе существующих возможностей API.
+  100% совместимый drop-in форк <a href="https://github.com/gozargah/marzban">Marzban</a> и <a href="https://github.com/MehrWizard/Marzdar">Marzdar</a> с завершённым интерфейсом, лимитами для реселлеров, квотами трафика, режимом оверселлинга и ограничением протоколов.
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar/actions/workflows/build.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzdar/build.yml?style=flat-square&logo=github" alt="Build Status" />
+  <a href="https://github.com/MehrWizard/Marzyar/actions/workflows/build.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzyar/build.yml?style=flat-square&logo=github" alt="Build Status" />
   </a>
-  <a href="https://hub.docker.com/r/mehrwizard/marzdar" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzdar?style=flat-square&logo=docker" alt="Docker Pulls" />
+  <a href="https://hub.docker.com/r/mehrwizard/marzyar" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzyar?style=flat-square&logo=docker" alt="Docker Pulls" />
   </a>
-  <a href="https://github.com/MehrWizard/Marzdar/stargazers">
-    <img src="https://img.shields.io/github/stars/MehrWizard/Marzdar?style=flat-square&logo=github" alt="Stars" />
+  <a href="https://github.com/MehrWizard/Marzyar/stargazers">
+    <img src="https://img.shields.io/github/stars/MehrWizard/Marzyar?style=flat-square&logo=github" alt="Stars" />
   </a>
   <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/MehrWizard/Marzdar?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/github/license/MehrWizard/Marzyar?style=flat-square" alt="License" />
   </a>
   <a href="https://t.me/MehrRoom" target="_blank">
     <img src="https://img.shields.io/badge/Telegram-Group-blue?style=flat-square&logo=telegram" alt="Telegram Group" />
@@ -45,69 +45,58 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
-    <img src="https://github.com/MehrWizard/Marzdar/raw/master/docs/assets/preview.png" alt="Marzdar Preview" width="800" height="auto">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
+    <img src="https://github.com/MehrWizard/Marzyar/raw/master/docs/assets/preview.png" alt="Marzyar Preview" width="800" height="auto">
   </a>
 </p>
 
 ---
 
-## Что такое Marzdar?
+## Что такое Marzyar?
 
-**Marzdar** — это прямая и 100% совместимая замена для [Marzban](https://github.com/gozargah/marzban).
+**Marzyar** — это эволюция **Marzdar** и **Marzban** со встроенным нативным функционалом для реселлеров.
 
-В оригинальном проекте Marzban в бэкенде уже реализовано множество функций и конечных точек REST API, для которых не было кнопок и элементов управления в веб-панели. **Цель Marzdar — завершить этот пользовательский интерфейс**, предоставив доступ ко всем возможностям бэкенда без нарушения совместимости.
+В отличие от сторонних форков, Marzyar **не изменяет базовые таблицы базы данных** (`admins`, `users`) и не создает ломающих миграций Alembic, гарантируя **100% безопасную обратную совместимость**:
 
----
-
-## Сравнение Marzban и Marzdar
-
-| Раздел | Marzban (Оригинал) | Marzdar |
-| :--- | :--- | :--- |
-| **Совместимость** | Стандартный Marzban | 100% совместимость (та же БД, CLI и ядро) |
-| **Управление администраторами** | Только через CLI / API | Полный веб-интерфейс (создание, редактирование, удаление, sudo, сброс трафика) |
-| **Шаблоны пользователей** | Только через API | Полный веб-интерфейс (шаблоны + автозаполнение формы в 1 клик) |
-| **Очередь продления (Next Plan)** | Только через API (`next_plan`) | Полный веб-интерфейс (настройка + мгновенная ручная активация) |
-| **Очистка истёкших пользователей** | Ручной SQL / API | Безопасное модальное окно пакетного удаления с фильтром по дате |
-| **Передача прав на пользователя** | Только через API | Веб-интерфейс передачи прав между администраторами |
-| **Темы и акценты** | Только светлая / тёмная | Светлая, тёмная и OLED-чёрная + 8 цветов акцента |
-| **Миграция** | - | Замена 1 строки в Docker образе |
+1. **Лимит пользователей (Slots)**: Ограничение количества аккаунтов, которые может создать реселлер.
+2. **Квоты трафика и Оверселлинг**:
+   - **Строгий режим (без оверселлинга)**: Квота ограничивает сумму лимитов пользователей ($\sum \text{user.data\_limit} \le \text{traffic\_limit}$).
+   - **Режим оверселлинга**: Квота ограничивает реально потребленный трафик пользователей ($\sum \text{user.used\_traffic} + \text{сбросы} \le \text{traffic\_limit}$).
+   - **Защищенный учет**: Сброс трафика обычным админом не обнуляет его израсходованную квоту.
+3. **Автоматическая блокировка (Locked State Machine)**:
+   - При превышении квоты активные пользователи реселлера переводятся в статус `locked` и немедленно отключаются от входящих подключений Xray.
+   - Записи в таблице `users` не повреждаются.
+   - При увеличении или сбросе квоты суперпользователем (Sudo) все пользователи мгновенно разблокируются и подключаются обратно к Xray.
+4. **Разрешенные инбаунды**: Возможность ограничить каждого реселлера конкретными инбаундами и протоколами.
+5. **Индикатор квоты в шапке панели**: Отображение оставшихся слотов и объема трафика в реальном времени.
 
 ---
 
-## Границы проекта
+## Сравнение
 
-### ✅ Что реализует Marzdar
-- **Завершение веб-интерфейса**: Создание удобных и понятных визуальных элементов для всех конечных точек API Marzban.
-- **100% взаимозаменяемость**: Никаких ломающих изменений в схеме базы данных, файлах конфигурации или командах CLI.
-- **Улучшение UI/UX**: Поддержка тем (светлая, тёмная, OLED Black), палитры акцентов и полная локализация на английский, персидский, русский и китайский языки.
-
-### ❌ Что выходит за рамки проекта (не планируется)
-- **Никаких кардинальных изменений бэкенда**: Мы не переписываем архитектуру и структуру таблиц.
-- **Никаких проприетарных протоколов**: Строгое следование стандартам Xray-core и Marzban.
-- **Никаких лишних функций**: Функции, нарушающие совместимость с Marzban, добавляться не будут.
+| Раздел | Marzban (Оригинал) | Marzdar | Marzyar |
+| :--- | :--- | :--- | :--- |
+| **Совместимость** | Стандарт | 100% совместимость | 100% совместимость (без изменения основных таблиц) |
+| **Веб-интерфейс** | Неполный | ✅ Полный | ✅ Полный |
+| **Лимит пользователей реселлера** | ❌ Нет | ❌ Нет | ✅ Встроен в UI |
+| **Квоты трафика и оверселлинг** | ❌ Нет | ❌ Нет | ✅ Встроен в UI |
+| **Автоблокировка при перерасходе** | ❌ Нет | ❌ Нет | ✅ Мгновенное отключение от Xray |
+| **Ограничение инбаундов** | ❌ Нет | ❌ Нет | ✅ Доступно |
+| **Безопасный откат к Marzban** | - | ✅ Безопасно | ✅ 100% Безопасно (без кастомных миграций) |
 
 ---
 
 ## Установка и миграция
 
-После установки оригинальной версии Marzban замените образ docker в `docker-compose.yml`:
+Для перехода на Marzyar достаточно изменить строку образа в `docker-compose.yml`:
 
-Из:
 ```yaml
 services:  
   marzban:  
-    image: gozargah/marzban:latest
+    image: mehrwizard/marzyar:latest
 ```
 
-В:
-```yaml
-services:  
-  marzban:  
-    image: mehrwizard/marzdar:latest
-```
-
-Затем выполните команду `marzban update` для завершения настройки `marzdar`:
+Затем выполните команду:
 ```bash
 marzban update
 ```
@@ -116,7 +105,7 @@ marzban update
 
 ## Пожертвование (Donation)
 
-Если вы находите Marzdar полезным и хотите поддержать развитие проекта:
+Если вы находите Marzyar полезным:
 
 - [Поддержать проект через платежный шлюз MehrNet](https://gateway.mehrnet.com/product/1DE5C11019E2)
 
@@ -124,4 +113,4 @@ marzban update
 
 ## Лицензия
 
-Marzdar распространяется под лицензией [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE).
+Marzyar распространяется под лицензией [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE).

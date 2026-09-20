@@ -1,30 +1,30 @@
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzdar Logo">
+      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzyar Logo">
     </picture>
   </a>
 </p>
 
-<h1 align="center">مرزدار (Marzdar)</h1>
+<h1 align="center">مرزیار (Marzyar)</h1>
 
 <p align="center">
-  یک فورک کاملاً سازگار و جایگزین مستقیم برای <a href="https://github.com/gozargah/marzban">مرزبان (Marzban)</a> با هدف تکمیل رابط کاربری بر اساس قابلیت‌های موجود در API.
+  یک فورک کاملاً سازگار و جایگزین مستقیم برای <a href="https://github.com/gozargah/marzban">مرزبان (Marzban)</a> و <a href="https://github.com/MehrWizard/Marzdar">مرزدار (Marzdar)</a> با پنل کاربری کامل، سهمیه‌بندی پیشرفته نمایندگان، سقف تعداد کاربران، قابلیت اورسل و محدودسازی پروتکل‌ها.
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar/actions/workflows/build.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzdar/build.yml?style=flat-square&logo=github" alt="Build Status" />
+  <a href="https://github.com/MehrWizard/Marzyar/actions/workflows/build.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/MehrWizard/Marzyar/build.yml?style=flat-square&logo=github" alt="Build Status" />
   </a>
-  <a href="https://hub.docker.com/r/mehrwizard/marzdar" target="_blank">
-    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzdar?style=flat-square&logo=docker" alt="Docker Pulls" />
+  <a href="https://hub.docker.com/r/mehrwizard/marzyar" target="_blank">
+    <img src="https://img.shields.io/docker/pulls/mehrwizard/marzyar?style=flat-square&logo=docker" alt="Docker Pulls" />
   </a>
-  <a href="https://github.com/MehrWizard/Marzdar/stargazers">
-    <img src="https://img.shields.io/github/stars/MehrWizard/Marzdar?style=flat-square&logo=github" alt="Stars" />
+  <a href="https://github.com/MehrWizard/Marzyar/stargazers">
+    <img src="https://img.shields.io/github/stars/MehrWizard/Marzyar?style=flat-square&logo=github" alt="Stars" />
   </a>
   <a href="./LICENSE">
-    <img src="https://img.shields.io/github/license/MehrWizard/Marzdar?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/github/license/MehrWizard/Marzyar?style=flat-square" alt="License" />
   </a>
   <a href="https://t.me/MehrRoom" target="_blank">
     <img src="https://img.shields.io/badge/Telegram-Group-blue?style=flat-square&logo=telegram" alt="Telegram Group" />
@@ -45,69 +45,57 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MehrWizard/Marzdar" target="_blank" rel="noopener noreferrer">
-    <img src="https://github.com/MehrWizard/Marzdar/raw/master/docs/assets/preview.png" alt="Marzdar Preview" width="800" height="auto">
+  <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
+    <img src="https://github.com/MehrWizard/Marzyar/raw/master/docs/assets/preview.png" alt="Marzyar Preview" width="800" height="auto">
   </a>
 </p>
 
 ---
 
-## مرزدار چیست؟
+## مرزیار چیست؟
 
-**مرزدار** یک جایگزین مستقیم، یکپارچه و ۱۰۰٪ سازگار برای [مرزبان (Marzban)](https://github.com/gozargah/marzban) است.
+**مرزیار** نسخه ارتقایافته و مجهز به سیستم مدیریت نمایندگان (Resellers) از پروژه‌های **مرزدار** و **مرزبان** است.
 
-پروژه اصلی مرزبان قابلیت‌ها و اندپوینت‌های REST API فراوانی در بک‌اند خود پیاده کرده بود که هرگز برای آن‌ها دکمه، پنجره یا کنترلی در پنل وب طراحی نشد. **مرزدار با هدف تکمیل این رابط کاربری ایجاد شده است** تا تمام امکانات موجود در بک‌اند را بدون ایجاد هرگونه ناسازگاری یا تغییر در هسته اصلی در اختیار کاربران قرار دهد.
+در حالی که پروژه **مرزدار** بر تکمیل بخش‌های جامانده رابط کاربری تمرکز دارد، **مرزیار** قابلیت‌های مدیریت، سهمیه‌بندی و کنترل دسترسی نمایندگان را به صورت بومی و بدون تغییر جداول اصلی پایگاه داده به سیستم اضافه کرده است:
 
----
-
-## مقایسه مرزبان و مرزدار
-
-| بخش | مرزبان (پروژه اصلی) | مرزدار |
-| :--- | :--- | :--- |
-| **سازگاری** | مرزبان استاندارد | ۱۰۰٪ سازگار و قابل جابجایی (همان دیتابیس، CLI و هسته) |
-| **مدیریت ادمین‌ها** | فقط از طریق CLI و API | پنل کامل در وب (ایجاد، ویرایش، حذف، سودو، مشاهده و ریست مصرف) |
-| **قالب‌های کاربر (Templates)** | فقط از طریق API | پنل کامل در وب (مدیریت قالب‌ها + تکمیل خودکار فرم کاربر با ۱ کلیک) |
-| **طرح بعدی (رزرو تمدید)** | فقط از طریق API (`next_plan`) | پنل کامل در وب (تنظیم پلن رزرو + فعال‌سازی فوری با ۱ کلیک) |
-| **پاکسازی کاربران منقضی** | دستی یا API | مودال اختصاصی و ایمن با فیلتر زمانی دقیق برای حذف گروهی |
-| **انتقال مالکیت کاربر** | فقط از طریق API | امکان انتقال کاربر بین ادمین‌ها در پنل وب |
-| **پوسته‌ها و رنگ‌های شاخص** | فقط تاریک و روشن ثابت | حالت روشن، تاریک و مشکی مطلق (OLED) + ۸ رنگ شاخص متنوع |
-| **مهاجرت و جابجایی** | - | تغییر تنها یک خط در ایمیج داکر بدون هیچ قطعی یا از دست رفتن داده |
+1. **سقف تعداد حساب‌های کاربری**: تعیین حداکثر تعداد کاربرانی که هر ادمین/نماینده می‌تواند بسازد.
+2. **سهمیه حجم و کنترل اورسل (Oversell)**:
+   - **حالت بدون اورسل (سخت‌گیرانه)**: سهمیه نماینده بر اساس مجموع حجم‌های تعریف شده برای کاربران سنجیده می‌شود و نماینده نمی‌تواند حجمی بیش از سهمیه خود به کاربران اختصاص دهد.
+   - **حالت با اورسل**: سهمیه نماینده بر اساس ترافیک واقعی مصرف شده سنجیده می‌شود.
+   - **محاسبه امن و غیرقابل دور زدن**: ادمین‌های عادی با ریست کردن ترافیک کاربران نمی‌توانند سهمیه مصرفی خود را بازگردانند؛ حجم ریست شده در شمارنده سهمیه ادمین ثبت می‌گردد.
+3. **وضعیت هوشمند قفل (Locked State Machine)**:
+   - با عبور نماینده از سهمیه، کاربران فعال او بدون تغییر در وضعیت دیتابیس به صورت موقت قفل شده و فوراً از اینباندهای Xray قطع می‌شوند.
+   - با تمدید یا ریست سهمیه توسط ادمین کل (Sudo)، کاربران قفل‌شده بلافاصله باز شده و به هسته Xray بازمی‌گردند.
+4. **اینباندهای مجاز (Allowed Inbounds)**: امکان محدود کردن نماینده به پروتکل‌ها و اینباندهای خاص (مثلاً فقط VMess).
+5. **ویجت وضعیت سهمیه در هدر پنل**: نمایش زنده حجم مصرفی، سقف کاربران و کاربران قفل شده برای نماینده.
 
 ---
 
-## اهداف و محدوده پروژه
+## مقایسه
 
-### ✅ اهدافی که مرزدار دنبال می‌کند
-- **تکمیل رابط کاربری**: افزودن کنترل‌ها و بخش‌های بصری شیک و ساده برای تمام قابلیت‌های موجود در API مرزبان.
-- **حفظ سازگاری کامل ۱۰۰٪**: عدم ایجاد تغییرات ناسازگار در پایگاه‌داده، فایل‌های تنظیمات یا دستورات ترمینال. هر زمان که مایل باشید می‌توانید به مرزبان بازگردید.
-- **بهبود تجربه کاربری (UI/UX)**: ارائه پوسته‌های جدید (از جمله مشکی OLED)، پالت‌های رنگی جذاب و ترجمه یکدست به زبان‌های فارسی، انگلیسی، روسی و چینی.
-
-### ❌ مواردی که در محدوده پروژه نیست (برنامه‌ریزی نشده)
-- **عدم تغییر در معماری بک‌اند**: ما موتور بک‌اند یا ساختار دیتابیس را بازنویسی نمی‌کنیم.
-- **عدم افزودن پروتکل‌های غیراستاندارد**: کاملاً مطابق با استانداردهای Xray-core و مرزبان پیش می‌رویم.
-- **عدم پیچیده‌سازی بیهوده**: امکاناتی که خارج از هدف اصلی بوده و باعث ناسازگاری شوند به پروژه افزوده نخواهند شد.
+| بخش | مرزبان (پروژه اصلی) | مرزدار | مرزیار |
+| :--- | :--- | :--- | :--- |
+| **سازگاری و جابجایی** | استاندارد | ۱۰۰٪ سازگار | ۱۰۰٪ سازگار (بدون دستکاری جداول اصلی) |
+| **رابط کاربری وب** | ناقص | ✅ کامل | ✅ کامل |
+| **سقف تعداد کاربران نماینده** | ❌ ندارد | ❌ ندارد | ✅ دارد (تحت پنل وب) |
+| **سهمیه ترافیک و اورسل** | ❌ ندارد | ❌ ندارد | ✅ دارد (با کنترل دقیق) |
+| **قطع خودکار در اتمام سهمیه** | ❌ ندارد | ❌ ندارد | ✅ دارد (جدا شدن آنی از Xray) |
+| **محدودسازی اینباندهای نماینده** | ❌ ندارد | ❌ ندارد | ✅ دارد |
+| **قابلیت بازگشت به مرزبان** | - | ✅ ایمن | ✅ ۱۰۰٪ ایمن (بدون مایگریشن‌های مخرب) |
 
 ---
 
 ## نصب و راه‌اندازی
 
-نصب مرزدار کمتر از یک دقیقه زمان می‌برد. پس از نصب نسخه اصلی مرزبان، کافیست ایمیج داکر مرزبان را به مرزدار تغییر دهید:
+برای جابجایی از مرزبان یا مرزدار به مرزیار، کافیست ایمیج داکر را در `docker-compose.yml` تغییر دهید:
 
-از:
 ```yaml
 services:  
   marzban:  
-    image: gozargah/marzban:latest
+    image: mehrwizard/marzyar:latest
 ```
 
-به:
-```yaml
-services:  
-  marzban:  
-    image: mehrwizard/marzdar:latest
-```
-
-در پایان دستور `marzban update` را اجرا نمایید تا راه‌اندازی `marzdar` تکمیل گردد:
+سپس دستور زیر را اجرا نمایید:
 ```bash
 marzban update
 ```
@@ -116,7 +104,7 @@ marzban update
 
 ## حمایت مالی (Donation)
 
-اگر مرزدار برای شما مفید واقع شده و مایل به حمایت از توسعه آن هستید:
+اگر مرزیار برای شما مفید واقع شده و مایل به حمایت از توسعه آن هستید:
 
 - [حمایت مالی از طریق درگاه پرداخت مهرنت](https://gateway.mehrnet.com/product/1DE5C11019E2)
 
@@ -124,4 +112,4 @@ marzban update
 
 ## لایسنس
 
-مرزدار تحت لایسنس [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE) منتشر شده است.
+مرزیار تحت لایسنس [GNU Affero General Public License v3.0 (AGPL-3.0)](./LICENSE) منتشر شده است.
