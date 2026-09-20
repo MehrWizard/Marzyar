@@ -67,6 +67,7 @@ def list_admins(
             consumed_str = readable_size(marzyar_crud.get_admin_total_consumed_traffic(db, admin.id, s)) if s else readable_size(admin.users_usage)
             oversell_str = ("Yes" if s.oversell_allowed else "No") if s else "N/A"
             locked_count = len(marzyar_crud.get_locked_user_ids_for_admin(db, admin.id)) if s else 0
+            inbounds_str = ", ".join(s.allowed_inbounds) if (s and s.allowed_inbounds) else "All"
             rows.append((
                 str(admin.username),
                 u_str,
@@ -74,12 +75,13 @@ def list_admins(
                 consumed_str,
                 oversell_str,
                 str(locked_count),
+                inbounds_str,
                 "✔️" if admin.is_sudo else "✖️",
                 utils.readable_datetime(admin.created_at),
             ))
 
         utils.print_table(
-            table=Table("Username", "Users", "Quota Limit", "Consumed", "Oversell", "Locked", "Is Sudo", "Created at"),
+            table=Table("Username", "Users", "Quota Limit", "Consumed", "Oversell", "Locked", "Inbounds", "Is Sudo", "Created at"),
             rows=rows
         )
 
@@ -242,6 +244,7 @@ def set_quota(
     traffic_limit_gb: Optional[float] = typer.Option(None, "--traffic-limit", "-t", help="Traffic limit in GB (0 to remove limit)"),
     users_limit: Optional[int] = typer.Option(None, "--users-limit", "-u", help="Users count limit (0 to remove limit)"),
     oversell: Optional[bool] = typer.Option(None, "--oversell/--no-oversell", help="Allow or disallow overselling"),
+    inbounds: Optional[str] = typer.Option(None, "--inbounds", "-i", help="Comma-separated list of allowed inbound tags (pass 'all' to allow all)"),
 ):
     """
     Configure Marzyar reseller limits and quota for an admin.
@@ -271,8 +274,14 @@ def set_quota(
         if oversell is not None:
             modify_data["oversell_allowed"] = oversell
 
+        if inbounds is not None:
+            if inbounds.strip().lower() in ("all", "*", ""):
+                modify_data["allowed_inbounds"] = None
+            else:
+                modify_data["allowed_inbounds"] = [tag.strip() for tag in inbounds.split(",") if tag.strip()]
+
         if not modify_data:
-            utils.error("No settings provided to update. Specify --traffic-limit, --users-limit, or --oversell.")
+            utils.error("No settings provided to update. Specify --traffic-limit, --users-limit, --oversell, or --inbounds.")
 
         modify = MarzyarAdminSettingsModify(**modify_data)
         marzyar_crud.update_admin_settings(db, admin.id, modify)
