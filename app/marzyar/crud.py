@@ -225,37 +225,37 @@ def get_admin_user_count(db: Session, admin_id: int, for_update: bool = False) -
             return len(db.query(User.id).filter(User.admin_id == admin_id).with_for_update().all())
         except Exception:
             pass
-    return db.query(func.count(User.id)).filter(User.admin_id == admin_id).scalar() or 0
+    return int(db.query(func.count(User.id)).filter(User.admin_id == admin_id).scalar() or 0)
 
 
 def get_admin_allocated_traffic(db: Session, admin_id: int, for_update: bool = False) -> int:
     if for_update:
         try:
             limits = db.query(User.data_limit).filter(User.admin_id == admin_id, User.data_limit > 0).with_for_update().all()
-            return sum(r[0] for r in limits)
+            return int(sum(r[0] or 0 for r in limits))
         except Exception:
             pass
-    return (
+    val = (
         db.query(func.coalesce(func.sum(User.data_limit), 0))
         .filter(User.admin_id == admin_id, User.data_limit > 0)
         .scalar()
-        or 0
     )
+    return int(val or 0)
 
 
 def get_admin_active_users_usage(db: Session, admin_id: int, for_update: bool = False) -> int:
     if for_update:
         try:
             usages = db.query(User.used_traffic).filter(User.admin_id == admin_id).with_for_update().all()
-            return sum(r[0] for r in usages)
+            return int(sum(r[0] or 0 for r in usages))
         except Exception:
             pass
-    return (
+    val = (
         db.query(func.coalesce(func.sum(User.used_traffic), 0))
         .filter(User.admin_id == admin_id)
         .scalar()
-        or 0
     )
+    return int(val or 0)
 
 
 def get_admin_total_consumed_traffic(
@@ -266,7 +266,7 @@ def get_admin_total_consumed_traffic(
 ) -> int:
     if settings is None:
         settings = get_admin_settings(db, admin_id)
-    base_counter = settings.quota_used_traffic if settings else 0
+    base_counter = int(settings.quota_used_traffic or 0) if settings else 0
     active_usage = get_admin_active_users_usage(db, admin_id, for_update=for_update)
     return max(0, base_counter + active_usage)
 
