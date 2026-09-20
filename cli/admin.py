@@ -60,14 +60,23 @@ def list_admins(
         from app.marzyar import crud as marzyar_crud
         rows = []
         for admin in admins:
-            s = marzyar_crud.get_admin_settings(db, admin.id)
-            u_count = marzyar_crud.get_admin_user_count(db, admin.id)
-            u_str = f"{u_count}/{s.users_limit}" if (s and s.users_limit is not None) else str(u_count)
-            t_limit_str = readable_size(s.traffic_limit) if (s and s.traffic_limit is not None) else "Unlimited"
-            consumed_str = readable_size(marzyar_crud.get_admin_total_consumed_traffic(db, admin.id, s)) if s else readable_size(admin.users_usage)
-            oversell_str = ("Yes" if s.oversell_allowed else "No") if s else "N/A"
-            locked_count = len(marzyar_crud.get_locked_user_ids_for_admin(db, admin.id)) if s else 0
-            inbounds_str = ", ".join(s.allowed_inbounds) if (s and s.allowed_inbounds) else "All"
+            if admin.is_sudo:
+                u_count = marzyar_crud.get_admin_user_count(db, admin.id)
+                u_str = f"{u_count} (Unlimited)"
+                t_limit_str = "Unlimited"
+                consumed_str = readable_size(admin.users_usage)
+                oversell_str = "N/A"
+                locked_count = 0
+                inbounds_str = "All"
+            else:
+                s = marzyar_crud.get_admin_settings(db, admin.id)
+                u_count = marzyar_crud.get_admin_user_count(db, admin.id)
+                u_str = f"{u_count}/{s.users_limit}" if (s and s.users_limit is not None) else str(u_count)
+                t_limit_str = readable_size(s.traffic_limit) if (s and s.traffic_limit is not None) else "Unlimited"
+                consumed_str = readable_size(marzyar_crud.get_admin_total_consumed_traffic(db, admin.id, s)) if s else readable_size(admin.users_usage)
+                oversell_str = ("Yes" if s.oversell_allowed else "No") if s else "N/A"
+                locked_count = len(marzyar_crud.get_locked_user_ids_for_admin(db, admin.id)) if s else 0
+                inbounds_str = ", ".join(s.allowed_inbounds) if (s and s.allowed_inbounds) else "All"
             rows.append((
                 str(admin.username),
                 u_str,
@@ -254,6 +263,9 @@ def set_quota(
         if not admin:
             utils.error(f'There\'s no admin with username "{username}"!')
 
+        if admin.is_sudo:
+            utils.error(f'Admin "{username}" is a Sudo admin. Limits and quotas cannot be applied to Sudo accounts.')
+
         from app.marzyar import crud as marzyar_crud
         from app.marzyar import quota as marzyar_quota
         from app.marzyar.schemas import MarzyarAdminSettingsModify
@@ -285,6 +297,8 @@ def set_quota(
 
         modify = MarzyarAdminSettingsModify(**modify_data)
         marzyar_crud.update_admin_settings(db, admin.id, modify)
+        if inbounds is not None:
+            marzyar_crud.enforce_admin_allowed_inbounds(db, admin.id, modify.allowed_inbounds)
         marzyar_quota.audit_admin_quotas(db)
 
         utils.success(f'Marzyar settings for "{username}" updated successfully.')
@@ -302,6 +316,9 @@ def reset_quota(
         admin: Union[Admin, None] = crud.get_admin(db, username=username)
         if not admin:
             utils.error(f'There\'s no admin with username "{username}"!')
+
+        if admin.is_sudo:
+            utils.error(f'Admin "{username}" is a Sudo admin. Sudo accounts have unlimited quota.')
 
         if not yes_to_all and not typer.confirm(
             f'Are you sure you want to reset consumed quota for "{username}"? All locked users will be unlocked.',

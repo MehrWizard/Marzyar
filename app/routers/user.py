@@ -136,6 +136,7 @@ def modify_user(
         new_data_limit=modified_user.data_limit,
         new_inbounds=modified_user.inbounds,
         new_status=modified_user.status,
+        new_proxies=modified_user.proxies,
     )
 
     old_status = dbuser.status
@@ -203,12 +204,25 @@ def reset_user_data_usage(
 ):
     """Reset user data usage"""
     if not admin.is_sudo:
-        from app.marzyar.crud import is_user_locked
+        from app.marzyar.crud import (
+            is_user_locked,
+            get_admin_settings,
+            get_admin_total_consumed_traffic,
+        )
         if is_user_locked(db, dbuser.id):
             raise HTTPException(
                 status_code=403,
                 detail="Cannot reset data usage while user is locked due to admin quota limits."
             )
+        target_admin_id = dbuser.admin_id or admin.id
+        settings = get_admin_settings(db, target_admin_id)
+        if settings and settings.traffic_limit is not None and settings.oversell_allowed:
+            consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
+            if consumed >= settings.traffic_limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Admin quota is exhausted. Cannot reset user data usage until quota is renewed."
+                )
 
     dbuser = crud.reset_user_data_usage(db=db, dbuser=dbuser)
 
@@ -334,12 +348,38 @@ def active_next_plan(
 ):
     """Reset user by next plan"""
     if not admin.is_sudo:
-        from app.marzyar.crud import is_user_locked
+        from app.marzyar.crud import (
+            is_user_locked,
+            get_admin_settings,
+            get_admin_allocated_traffic,
+            get_admin_total_consumed_traffic,
+        )
         if is_user_locked(db, dbuser.id):
             raise HTTPException(
                 status_code=403,
                 detail="Cannot activate next plan while user is locked due to admin quota limits."
             )
+        target_admin_id = dbuser.admin_id or admin.id
+        settings = get_admin_settings(db, target_admin_id)
+        if settings and settings.traffic_limit is not None:
+            if not settings.oversell_allowed:
+                old_limit = dbuser.data_limit or 0
+                next_limit = dbuser.next_plan.data_limit if dbuser.next_plan else old_limit
+                delta = (next_limit - old_limit) if next_limit is not None else 0
+                if delta > 0:
+                    allocated = get_admin_allocated_traffic(db, target_admin_id, for_update=True)
+                    if allocated + delta > settings.traffic_limit:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Admin allocated traffic quota would be exceeded. Cannot activate next plan."
+                        )
+            else:
+                consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
+                if consumed >= settings.traffic_limit:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Admin quota is exhausted. Cannot activate next plan until quota is renewed."
+                    )
 
     dbuser = crud.reset_user_by_next(db=db, dbuser=dbuser)
 

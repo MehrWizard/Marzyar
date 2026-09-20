@@ -32,6 +32,10 @@ def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdm
         else:
             is_quota_exceeded = allocated > s.traffic_limit
 
+    if admin.is_sudo:
+        is_user_limit_exceeded = False
+        is_quota_exceeded = False
+
     return MarzyarAdminSettingsResponse(
         admin_id=admin.id,
         username=admin.username,
@@ -91,7 +95,14 @@ def update_admin_settings(
 ):
     """Update Marzyar limits, quota, oversell flag, and allowed inbounds for an admin (Sudo only)."""
     admin = _get_admin(db, admin_identifier)
+    if admin.is_sudo:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot apply limits or quotas to a Sudo admin account."
+        )
     crud.update_admin_settings(db, admin.id, modify)
+    if modify.allowed_inbounds is not None or "allowed_inbounds" in modify.model_fields_set:
+        crud.enforce_admin_allowed_inbounds(db, admin.id, modify.allowed_inbounds)
     # Immediately re-audit quotas to lock or unlock users based on the new settings
     quota.audit_admin_quotas(db)
 
@@ -106,6 +117,11 @@ def reset_admin_quota(
 ):
     """Reset an admin's cumulative consumed quota counter and unlock their users (Sudo only)."""
     admin = _get_admin(db, admin_identifier)
+    if admin.is_sudo:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot reset quota for a Sudo admin account (Sudo accounts have unlimited quota)."
+        )
     crud.reset_admin_quota_counter(db, admin.id)
     # Re-audit quotas immediately to lift locks
     quota.audit_admin_quotas(db)
@@ -132,6 +148,10 @@ def get_my_limits(
             is_quota_exceeded = consumed >= s.traffic_limit
         else:
             is_quota_exceeded = allocated > s.traffic_limit
+
+    if current_admin.is_sudo:
+        is_user_limit_exceeded = False
+        is_quota_exceeded = False
 
     return MarzyarMyLimitsResponse(
         username=current_admin.username,

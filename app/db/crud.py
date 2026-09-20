@@ -1011,18 +1011,33 @@ def set_owner(db: Session, dbuser: User, admin: Admin) -> User:
     Sets the owner (admin) of a user.
     If the user was locked under the previous admin, their lock is cleared so
     quota auditing can re-evaluate them cleanly under the new admin's limits.
+    Transfers usage quota accountability between old and new admins cleanly.
     """
+    old_admin_id = dbuser.admin_id
+    used_traffic = dbuser.used_traffic or 0
+
     try:
         from app.marzyar.quota import unlock_and_restore_users
-        from app.marzyar.crud import is_user_locked
+        from app.marzyar.crud import is_user_locked, increment_admin_quota_counter
         if is_user_locked(db, dbuser.id):
             unlock_and_restore_users(db, [dbuser.id])
+
+        if old_admin_id and old_admin_id != admin.id and used_traffic > 0:
+            increment_admin_quota_counter(db, old_admin_id, used_traffic)
+            increment_admin_quota_counter(db, admin.id, -used_traffic)
     except Exception:
         pass
 
     dbuser.admin = admin
     db.commit()
     db.refresh(dbuser)
+
+    try:
+        from app.marzyar.quota import audit_admin_quotas
+        audit_admin_quotas(db)
+    except Exception:
+        pass
+
     return dbuser
 
 
@@ -1153,6 +1168,11 @@ def update_admin(db: Session, dbadmin: Admin, modified_admin: AdminModify) -> Ad
 
     db.commit()
     db.refresh(dbadmin)
+    try:
+        from app.marzyar.quota import audit_admin_quotas
+        audit_admin_quotas(db)
+    except Exception:
+        pass
     return dbadmin
 
 
@@ -1180,6 +1200,11 @@ def partial_update_admin(db: Session, dbadmin: Admin, modified_admin: AdminParti
 
     db.commit()
     db.refresh(dbadmin)
+    try:
+        from app.marzyar.quota import audit_admin_quotas
+        audit_admin_quotas(db)
+    except Exception:
+        pass
     return dbadmin
 
 

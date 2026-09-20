@@ -1,5 +1,5 @@
 import threading
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,7 @@ def check_admin_can_create_user(
 
     # 1. Check user count limit
     if settings.users_limit is not None:
-        current_count = crud.get_admin_user_count(db, admin.id)
+        current_count = crud.get_admin_user_count(db, admin.id, for_update=True)
         if current_count >= settings.users_limit:
             raise HTTPException(
                 status_code=403,
@@ -68,7 +68,7 @@ def check_admin_can_create_user(
                     status_code=400,
                     detail="Cannot create user with unlimited data when overselling is disabled for your account. Please specify a data limit."
                 )
-            allocated = crud.get_admin_allocated_traffic(db, admin.id)
+            allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
             if allocated + data_limit > settings.traffic_limit:
                 raise HTTPException(
                     status_code=403,
@@ -76,7 +76,7 @@ def check_admin_can_create_user(
                 )
         else:
             # Oversell Enabled: check total consumed traffic
-            consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings)
+            consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings, for_update=True)
             if consumed >= settings.traffic_limit:
                 raise HTTPException(
                     status_code=403,
@@ -90,7 +90,8 @@ def check_admin_can_modify_user(
     target_user: User,
     new_data_limit: Optional[int],
     new_inbounds: Optional[Dict[str, List[str]]],
-    new_status: Optional[UserStatus]
+    new_status: Optional[UserStatus],
+    new_proxies: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Validate modifications to existing users under Marzyar constraints.
@@ -121,15 +122,29 @@ def check_admin_can_modify_user(
         return
 
     # 2. Check allowed inbounds (empty or None means all permitted)
-    if settings.allowed_inbounds and new_inbounds:
+    if settings.allowed_inbounds:
         allowed_set = set(settings.allowed_inbounds)
-        for proto, tags in new_inbounds.items():
-            for tag in tags:
-                if tag not in allowed_set:
-                    raise HTTPException(
-                        status_code=403,
-                        detail=f"Inbound '{tag}' is not permitted for your admin account."
-                    )
+        if new_inbounds:
+            for proto, tags in new_inbounds.items():
+                for tag in tags:
+                    if tag not in allowed_set:
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Inbound '{tag}' is not permitted for your admin account."
+                        )
+        # Check newly added proxies if inbounds not explicitly specified for them
+        if new_proxies:
+            existing_proxy_types = {p.type for p in target_user.proxies}
+            for p_type in new_proxies:
+                if p_type not in existing_proxy_types:
+                    if not new_inbounds or p_type not in new_inbounds:
+                        for inbound in xray.config.inbounds_by_protocol.get(p_type, []):
+                            tag = inbound.get("tag")
+                            if tag and tag not in allowed_set:
+                                raise HTTPException(
+                                    status_code=403,
+                                    detail=f"Inbound '{tag}' for protocol '{p_type}' is not permitted for your admin account."
+                                )
 
     # 3. Check traffic quota
     if settings.traffic_limit is not None:
@@ -149,7 +164,7 @@ def check_admin_can_modify_user(
                 )
 
             if delta > 0:
-                allocated = crud.get_admin_allocated_traffic(db, admin.id)
+                allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
                 if allocated + delta > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,
@@ -157,14 +172,14 @@ def check_admin_can_modify_user(
                     )
 
             if is_activating:
-                allocated = crud.get_admin_allocated_traffic(db, admin.id)
+                allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
                 if allocated + delta > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,
                         detail="Admin allocated traffic quota is currently exceeded. Cannot activate users until quota is renewed or allocated limits reduced."
                     )
         elif settings.oversell_allowed and is_activating:
-            consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings)
+            consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings, for_update=True)
             if consumed >= settings.traffic_limit:
                 raise HTTPException(
                     status_code=403,

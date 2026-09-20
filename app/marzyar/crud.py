@@ -88,7 +88,7 @@ def increment_admin_quota_counter(db: Session, admin_id: int, amount: int) -> No
     Atomically increment admin's consumed traffic in the database when a user's usage is reset
     or when a user is deleted, eliminating lost-update race conditions.
     """
-    if amount <= 0:
+    if amount == 0:
         return
     get_or_create_admin_settings(db, admin_id)
     db.query(MarzyarAdminSettings).filter(
@@ -219,11 +219,22 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     return restored
 
 
-def get_admin_user_count(db: Session, admin_id: int) -> int:
+def get_admin_user_count(db: Session, admin_id: int, for_update: bool = False) -> int:
+    if for_update:
+        try:
+            return len(db.query(User.id).filter(User.admin_id == admin_id).with_for_update().all())
+        except Exception:
+            pass
     return db.query(func.count(User.id)).filter(User.admin_id == admin_id).scalar() or 0
 
 
-def get_admin_allocated_traffic(db: Session, admin_id: int) -> int:
+def get_admin_allocated_traffic(db: Session, admin_id: int, for_update: bool = False) -> int:
+    if for_update:
+        try:
+            limits = db.query(User.data_limit).filter(User.admin_id == admin_id, User.data_limit > 0).with_for_update().all()
+            return sum(r[0] for r in limits)
+        except Exception:
+            pass
     return (
         db.query(func.coalesce(func.sum(User.data_limit), 0))
         .filter(User.admin_id == admin_id, User.data_limit > 0)
@@ -232,7 +243,13 @@ def get_admin_allocated_traffic(db: Session, admin_id: int) -> int:
     )
 
 
-def get_admin_active_users_usage(db: Session, admin_id: int) -> int:
+def get_admin_active_users_usage(db: Session, admin_id: int, for_update: bool = False) -> int:
+    if for_update:
+        try:
+            usages = db.query(User.used_traffic).filter(User.admin_id == admin_id).with_for_update().all()
+            return sum(r[0] for r in usages)
+        except Exception:
+            pass
     return (
         db.query(func.coalesce(func.sum(User.used_traffic), 0))
         .filter(User.admin_id == admin_id)
@@ -244,10 +261,49 @@ def get_admin_active_users_usage(db: Session, admin_id: int) -> int:
 def get_admin_total_consumed_traffic(
     db: Session,
     admin_id: int,
-    settings: Optional[MarzyarAdminSettings] = None
+    settings: Optional[MarzyarAdminSettings] = None,
+    for_update: bool = False,
 ) -> int:
     if settings is None:
         settings = get_admin_settings(db, admin_id)
     base_counter = settings.quota_used_traffic if settings else 0
-    active_usage = get_admin_active_users_usage(db, admin_id)
+    active_usage = get_admin_active_users_usage(db, admin_id, for_update=for_update)
     return max(0, base_counter + active_usage)
+
+
+def enforce_admin_allowed_inbounds(db: Session, admin_id: int, allowed_inbounds: Optional[List[str]]) -> None:
+    """
+    Enforce inbound tag restrictions on an admin's existing users.
+    Any user proxies configured with inbounds not in allowed_inbounds will have
+    those inbounds added to proxy.excluded_inbounds and re-applied to Xray.
+    """
+    if not allowed_inbounds:
+        return
+    allowed_set = set(allowed_inbounds)
+    from app.db.crud import get_or_create_inbound
+    from app.models.user import UserStatus
+    from app import xray
+
+    users = db.query(User).filter(User.admin_id == admin_id).all()
+    modified_users = []
+    for u in users:
+        user_modified = False
+        for p in u.proxies:
+            all_inbound_tags = [ib["tag"] for ib in xray.config.inbounds_by_protocol.get(p.type, [])]
+            current_excluded = {ib.tag for ib in p.excluded_inbounds}
+            for tag in all_inbound_tags:
+                if tag not in allowed_set and tag not in current_excluded:
+                    p.excluded_inbounds.append(get_or_create_inbound(db, tag))
+                    user_modified = True
+        if user_modified:
+            modified_users.append(u)
+
+    if modified_users:
+        db.commit()
+        for u in modified_users:
+            if u.status in [UserStatus.active, UserStatus.on_hold] and not u.is_locked:
+                try:
+                    xray.operations.update_user(u)
+                except Exception as e:
+                    logger.warning(f"[Marzyar] Error updating Xray for user {u.username} after inbound restriction: {e}")
+
