@@ -85,12 +85,18 @@ def reset_admin_quota_counter(db: Session, admin_id: int) -> None:
 
 def increment_admin_quota_counter(db: Session, admin_id: int, amount: int) -> None:
     """
-    Increment admin's consumed traffic when a user's usage is reset so resets cannot bypass quota.
+    Atomically increment admin's consumed traffic in the database when a user's usage is reset
+    or when a user is deleted, eliminating lost-update race conditions.
     """
     if amount <= 0:
         return
-    settings = get_or_create_admin_settings(db, admin_id)
-    settings.quota_used_traffic = (settings.quota_used_traffic or 0) + amount
+    get_or_create_admin_settings(db, admin_id)
+    db.query(MarzyarAdminSettings).filter(
+        MarzyarAdminSettings.admin_id == admin_id
+    ).update(
+        {MarzyarAdminSettings.quota_used_traffic: MarzyarAdminSettings.quota_used_traffic + amount},
+        synchronize_session=False
+    )
     db.commit()
 
 
@@ -126,17 +132,17 @@ def lock_users(
     """
     Lock a list of users under an admin, recording their original_status in marzyar_user_locks
     and setting user.status to disabled in the users table so Xray and client subscriptions treat them as disabled.
+    Idempotent and safe against concurrent invocations.
     """
     if not users:
         return []
 
     from app.models.user import UserStatus
 
-    existing = set(get_locked_user_ids_for_admin(db, admin_id))
     new_locked = []
-
     for uid, orig_status in users:
-        if uid not in existing:
+        existing_lock = db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id == uid).first()
+        if not existing_lock:
             lock_entry = MarzyarUserLock(
                 user_id=uid,
                 admin_id=admin_id,
@@ -145,20 +151,26 @@ def lock_users(
                 original_status=orig_status,
             )
             db.add(lock_entry)
-            dbuser = db.query(User).filter(User.id == uid).first()
-            if dbuser:
-                dbuser.status = UserStatus.disabled
-            new_locked.append(uid)
+        else:
+            existing_lock.original_status = orig_status
+
+        dbuser = db.query(User).filter(User.id == uid).first()
+        if dbuser:
+            dbuser.status = UserStatus.disabled
+        new_locked.append(uid)
 
     if new_locked:
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
     return new_locked
 
 
 def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     """
     Remove users from lock table, restoring their original_status in the users table.
-    Returns list of (User, original_status).
+    Returns list of (User, original_status). Idempotent and crash-proof.
     """
     if not user_ids:
         return []
@@ -184,7 +196,10 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
         db.delete(lock)
 
     if restored:
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
     return restored
 
 

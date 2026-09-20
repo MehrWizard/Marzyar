@@ -1,3 +1,4 @@
+import threading
 from typing import Dict, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -7,6 +8,8 @@ from app.db.models import Admin, User
 from app.models.user import UserStatus
 from app.marzyar import crud
 from app.marzyar.models import MarzyarAdminSettings
+
+_audit_lock = threading.Lock()
 
 
 def check_admin_can_create_user(
@@ -22,7 +25,17 @@ def check_admin_can_create_user(
     if admin.is_sudo:
         return
 
-    settings = crud.get_admin_settings(db, admin.id)
+    # Lock admin settings row to prevent concurrent race conditions on user creation (TOCTOU)
+    try:
+        settings = (
+            db.query(MarzyarAdminSettings)
+            .filter(MarzyarAdminSettings.admin_id == admin.id)
+            .with_for_update()
+            .first()
+        )
+    except Exception:
+        settings = crud.get_admin_settings(db, admin.id)
+
     if not settings:
         return
 
@@ -85,12 +98,12 @@ def check_admin_can_modify_user(
     if admin.is_sudo:
         return
 
-    # 1. Prevent activating a locked user if the admin is still locked
+    # 1. Prevent activating or putting on-hold a locked user if the admin is still locked
     if crud.is_user_locked(db, target_user.id):
-        if new_status == UserStatus.active:
+        if new_status in [UserStatus.active, UserStatus.on_hold]:
             raise HTTPException(
                 status_code=403,
-                detail="User is currently locked due to admin quota limits and cannot be manually activated. Increase or reset admin quota first."
+                detail="User is currently locked due to admin quota limits and cannot be activated. Increase or reset admin quota first."
             )
 
     settings = crud.get_admin_settings(db, admin.id)
@@ -140,54 +153,56 @@ def audit_admin_quotas(db: Session) -> None:
     - If an admin is over quota: lock their active users and remove them from Xray inbounds.
     - If an admin is back under quota: unlock their users and restore them to Xray inbounds.
     Original user.status remains intact in the database for 100% rollback compatibility.
+    Thread-safe against concurrent invocations.
     """
-    all_settings = db.query(MarzyarAdminSettings).all()
+    with _audit_lock:
+        all_settings = db.query(MarzyarAdminSettings).all()
 
-    for s in all_settings:
-        if s.traffic_limit is None:
-            # Unlimited quota: unlock any previously locked users if they exist
-            locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
-            if locked_ids:
-                _unlock_and_restore_users(db, list(locked_ids))
-            continue
+        for s in all_settings:
+            if s.traffic_limit is None:
+                # Unlimited quota: unlock any previously locked users if they exist
+                locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
+                if locked_ids:
+                    _unlock_and_restore_users(db, list(locked_ids))
+                continue
 
-        # Evaluate quota condition
-        if s.oversell_allowed:
-            consumed = crud.get_admin_total_consumed_traffic(db, s.admin_id, s)
-            is_exceeded = consumed >= s.traffic_limit
-        else:
-            allocated = crud.get_admin_allocated_traffic(db, s.admin_id)
-            is_exceeded = allocated > s.traffic_limit
+            # Evaluate quota condition
+            if s.oversell_allowed:
+                consumed = crud.get_admin_total_consumed_traffic(db, s.admin_id, s)
+                is_exceeded = consumed >= s.traffic_limit
+            else:
+                allocated = crud.get_admin_allocated_traffic(db, s.admin_id)
+                is_exceeded = allocated > s.traffic_limit
 
-        currently_locked = crud.get_locked_user_ids_for_admin(db, s.admin_id)
+            currently_locked = crud.get_locked_user_ids_for_admin(db, s.admin_id)
 
-        if is_exceeded:
-            # Find active or on_hold users not yet locked
-            active_users = (
-                db.query(User)
-                .filter(
-                    User.admin_id == s.admin_id,
-                    User.status.in_([UserStatus.active, UserStatus.on_hold]),
-                    ~User.id.in_(currently_locked) if currently_locked else True
+            if is_exceeded:
+                # Find active or on_hold users not yet locked
+                active_users = (
+                    db.query(User)
+                    .filter(
+                        User.admin_id == s.admin_id,
+                        User.status.in_([UserStatus.active, UserStatus.on_hold]),
+                        ~User.id.in_(currently_locked) if currently_locked else True
+                    )
+                    .all()
                 )
-                .all()
-            )
-            if active_users:
-                to_lock = [(u.id, u.status.value) for u in active_users]
-                crud.lock_users(db, to_lock, s.admin_id, reason="admin_quota_exceeded")
-                for u in active_users:
-                    try:
-                        xray.operations.remove_user(u)
-                    except Exception as e:
-                        logger.warning(f"[Marzyar] Error removing locked user {u.username} from Xray: {e}")
-                logger.warning(
-                    f"[Marzyar] Admin ID {s.admin_id} exceeded quota ({s.traffic_limit} bytes). "
-                    f"Locked {len(to_lock)} user(s) (set status to disabled and recorded original status)."
-                )
-        else:
-            # Under quota: unlock users if currently locked
-            if currently_locked:
-                _unlock_and_restore_users(db, list(currently_locked))
+                if active_users:
+                    to_lock = [(u.id, u.status.value) for u in active_users]
+                    crud.lock_users(db, to_lock, s.admin_id, reason="admin_quota_exceeded")
+                    for u in active_users:
+                        try:
+                            xray.operations.remove_user(u)
+                        except Exception as e:
+                            logger.warning(f"[Marzyar] Error removing locked user {u.username} from Xray: {e}")
+                    logger.warning(
+                        f"[Marzyar] Admin ID {s.admin_id} exceeded quota ({s.traffic_limit} bytes). "
+                        f"Locked {len(to_lock)} user(s) (set status to disabled and recorded original status)."
+                    )
+            else:
+                # Under quota: unlock users if currently locked
+                if currently_locked:
+                    _unlock_and_restore_users(db, list(currently_locked))
 
 
 def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:

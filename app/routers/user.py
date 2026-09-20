@@ -190,6 +190,14 @@ def reset_user_data_usage(
     admin: Admin = Depends(Admin.get_current),
 ):
     """Reset user data usage"""
+    if not admin.is_sudo:
+        from app.marzyar.crud import is_user_locked
+        if is_user_locked(db, dbuser.id):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot reset data usage while user is locked due to admin quota limits."
+            )
+
     dbuser = crud.reset_user_data_usage(db=db, dbuser=dbuser)
     if dbuser.status in [UserStatus.active, UserStatus.on_hold]:
         bg.add_task(xray.operations.add_user, dbuser=dbuser)

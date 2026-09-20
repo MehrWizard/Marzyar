@@ -442,7 +442,8 @@ def remove_user(db: Session, dbuser: User) -> User:
         from app.marzyar import crud as marzyar_crud
         if admin_id and used_traffic:
             marzyar_crud.increment_admin_quota_counter(db, admin_id, used_traffic)
-        marzyar_crud.unlock_users(db, [dbuser.id])
+        from app.marzyar.models import MarzyarUserLock
+        db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id == dbuser.id).delete(synchronize_session=False)
     except Exception:
         pass
 
@@ -482,8 +483,8 @@ def remove_users(db: Session, dbusers: List[User]):
         db.delete(dbuser)
 
     try:
-        from app.marzyar import crud as marzyar_crud
-        marzyar_crud.unlock_users(db, user_ids)
+        from app.marzyar.models import MarzyarUserLock
+        db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id.in_(user_ids)).delete(synchronize_session=False)
     except Exception:
         pass
 
@@ -636,8 +637,17 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
 
     dbuser.used_traffic = 0
     dbuser.node_usages.clear()
-    if dbuser.status not in (UserStatus.expired or UserStatus.disabled):
-        dbuser.status = UserStatus.active.value
+    try:
+        from app.marzyar.crud import is_user_locked
+        locked = is_user_locked(db, dbuser.id)
+    except Exception:
+        locked = False
+
+    if not locked:
+        if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+            dbuser.status = UserStatus.active.value
+    else:
+        dbuser.status = UserStatus.disabled.value
 
     if dbuser.next_plan:
         db.delete(dbuser.next_plan)
@@ -678,7 +688,16 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
             pass
 
     dbuser.node_usages.clear()
-    dbuser.status = UserStatus.active.value
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+        if lock:
+            lock.original_status = UserStatus.active.value
+            dbuser.status = UserStatus.disabled.value
+        else:
+            dbuser.status = UserStatus.active.value
+    except Exception:
+        dbuser.status = UserStatus.active.value
 
     remaining_traffic = (
         max(0, (dbuser.data_limit or 0) - (dbuser.used_traffic or 0))
