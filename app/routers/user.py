@@ -210,6 +210,7 @@ def reset_user_data_usage(
         from app.marzyar.crud import (
             is_user_locked,
             get_admin_settings,
+            get_admin_allocated_traffic,
             get_admin_total_consumed_traffic,
         )
         if is_user_locked(db, dbuser.id):
@@ -219,13 +220,21 @@ def reset_user_data_usage(
             )
         target_admin_id = dbuser.admin_id or admin.id
         settings = get_admin_settings(db, target_admin_id)
-        if settings and settings.traffic_limit is not None and settings.oversell_allowed:
-            consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
-            if consumed >= settings.traffic_limit:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Admin quota is exhausted. Cannot reset user data usage until quota is renewed."
-                )
+        if settings and settings.traffic_limit is not None:
+            if settings.oversell_allowed:
+                consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
+                if consumed >= settings.traffic_limit:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Admin quota is exhausted. Cannot reset user data usage until quota is renewed."
+                    )
+            elif dbuser.status == UserStatus.limited:
+                allocated = get_admin_allocated_traffic(db, target_admin_id, for_update=True)
+                if allocated > settings.traffic_limit:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Admin allocated traffic quota is currently exceeded. Cannot activate users until quota is renewed or allocated limits reduced."
+                    )
 
     dbuser = crud.reset_user_data_usage(db=db, dbuser=dbuser)
 
@@ -470,7 +479,7 @@ def set_owner(
     user = UserResponse.model_validate(dbuser)
 
     if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
-        xray.operations.add_user(dbuser)
+        xray.operations.update_user(dbuser)
     else:
         xray.operations.remove_user(dbuser)
 

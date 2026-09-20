@@ -591,6 +591,25 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
             else:
                 dbuser.status = UserStatus.expired
 
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+        if lock:
+            now_ts = datetime.utcnow().timestamp()
+            if lock.original_status == UserStatus.limited.value:
+                if modify.data_limit is not None and (not dbuser.data_limit or dbuser.used_traffic < dbuser.data_limit):
+                    if not dbuser.expire or dbuser.expire > now_ts:
+                        lock.original_status = UserStatus.active.value
+            elif lock.original_status == UserStatus.expired.value:
+                if modify.expire is not None and (not dbuser.expire or dbuser.expire > now_ts):
+                    if dbuser.data_limit and dbuser.used_traffic >= dbuser.data_limit:
+                        lock.original_status = UserStatus.limited.value
+                    else:
+                        lock.original_status = UserStatus.active.value
+            dbuser.status = UserStatus.disabled
+    except Exception:
+        pass
+
     if modify.note is not None:
         dbuser.note = modify.note or None
 
@@ -675,6 +694,7 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
         try:
             from app.marzyar import quota as marzyar_quota
             marzyar_quota.audit_admin_quotas(db)
+            db.refresh(dbuser)
         except Exception:
             pass
 
@@ -756,6 +776,7 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
         try:
             from app.marzyar import quota as marzyar_quota
             marzyar_quota.audit_admin_quotas(db)
+            db.refresh(dbuser)
         except Exception:
             pass
 
@@ -819,10 +840,26 @@ def reset_all_users_data_usage(db: Session, admin: Optional[Admin] = None):
     if admin:
         query = query.filter(User.admin == admin)
 
+    affected_admin_ids = set()
+    admin_traffic_to_increment = defaultdict(int)
+
     for dbuser in query.all():
+        if dbuser.admin_id and dbuser.used_traffic:
+            affected_admin_ids.add(dbuser.admin_id)
+            admin_traffic_to_increment[dbuser.admin_id] += dbuser.used_traffic
         dbuser.used_traffic = 0
-        if dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
-            dbuser.status = UserStatus.active
+        try:
+            from app.marzyar.models import MarzyarUserLock
+            lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+            if lock:
+                if lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value):
+                    lock.original_status = UserStatus.active.value
+                dbuser.status = UserStatus.disabled
+            elif dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
+                dbuser.status = UserStatus.active
+        except Exception:
+            if dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
+                dbuser.status = UserStatus.active
         dbuser.usage_logs.clear()
         dbuser.node_usages.clear()
         if dbuser.next_plan:
@@ -830,7 +867,21 @@ def reset_all_users_data_usage(db: Session, admin: Optional[Admin] = None):
             dbuser.next_plan = None
         db.add(dbuser)
 
+    for aid, traffic in admin_traffic_to_increment.items():
+        try:
+            from app.marzyar import crud as marzyar_crud
+            marzyar_crud.increment_admin_quota_counter(db, aid, traffic)
+        except Exception:
+            pass
+
     db.commit()
+
+    if affected_admin_ids:
+        try:
+            from app.marzyar import quota as marzyar_quota
+            marzyar_quota.audit_admin_quotas(db)
+        except Exception:
+            pass
 
 
 def disable_all_active_users(db: Session, admin: Optional[Admin] = None):
@@ -846,6 +897,15 @@ def disable_all_active_users(db: Session, admin: Optional[Admin] = None):
         query = query.filter(User.admin == admin)
 
     query.update({User.status: UserStatus.disabled, User.last_status_change: datetime.utcnow()}, synchronize_session=False)
+
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        lock_query = db.query(MarzyarUserLock)
+        if admin:
+            lock_query = lock_query.filter(MarzyarUserLock.admin_id == admin.id)
+        lock_query.update({MarzyarUserLock.original_status: UserStatus.disabled.value}, synchronize_session=False)
+    except Exception:
+        pass
 
     db.commit()
 
@@ -1043,6 +1103,28 @@ def set_owner(db: Session, dbuser: User, admin: Admin) -> User:
     dbuser.admin = admin
     db.commit()
     db.refresh(dbuser)
+
+    try:
+        from app.marzyar.crud import get_admin_settings
+        from app import xray
+        admin_settings = get_admin_settings(db, admin.id)
+        if admin_settings and admin_settings.allowed_inbounds:
+            allowed_set = set(admin_settings.allowed_inbounds)
+            user_modified = False
+            for p in dbuser.proxies:
+                proto_str = p.type.value if hasattr(p.type, 'value') else str(p.type)
+                inbounds_for_proto = xray.config.inbounds_by_protocol.get(proto_str) or xray.config.inbounds_by_protocol.get(p.type, [])
+                all_inbound_tags = [ib["tag"] for ib in inbounds_for_proto]
+                current_excluded = {ib.tag for ib in p.excluded_inbounds}
+                for tag in all_inbound_tags:
+                    if tag not in allowed_set and tag not in current_excluded:
+                        p.excluded_inbounds.append(get_or_create_inbound(db, tag))
+                        user_modified = True
+            if user_modified:
+                db.commit()
+                db.refresh(dbuser)
+    except Exception:
+        pass
 
     try:
         from app.marzyar.quota import audit_admin_quotas
