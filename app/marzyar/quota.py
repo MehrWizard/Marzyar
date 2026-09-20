@@ -133,20 +133,28 @@ def check_admin_can_modify_user(
 
     # 3. Check traffic quota
     if settings.traffic_limit is not None:
-        if not settings.oversell_allowed and new_data_limit is not None:
-            if new_data_limit <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
-                )
-            old_limit = target_user.data_limit or 0
-            delta = new_data_limit - old_limit
-            if delta > 0:
+        if not settings.oversell_allowed:
+            if new_data_limit is not None:
+                if new_data_limit <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot set unlimited data when overselling is disabled for your account. Please specify a data limit."
+                    )
+                old_limit = target_user.data_limit or 0
+                delta = new_data_limit - old_limit
+                if delta > 0:
+                    allocated = crud.get_admin_allocated_traffic(db, admin.id)
+                    if allocated + delta > settings.traffic_limit:
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Admin traffic quota exceeded. New allocated total ({allocated + delta} bytes) exceeds limit ({settings.traffic_limit} bytes)."
+                        )
+            if new_status in [UserStatus.active, UserStatus.on_hold]:
                 allocated = crud.get_admin_allocated_traffic(db, admin.id)
-                if allocated + delta > settings.traffic_limit:
+                if allocated > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,
-                        detail=f"Admin traffic quota exceeded. New allocated total ({allocated + delta} bytes) exceeds limit ({settings.traffic_limit} bytes)."
+                        detail="Admin allocated traffic quota is currently exceeded. Cannot activate users until quota is renewed or allocated limits reduced."
                     )
         elif settings.oversell_allowed and new_status in [UserStatus.active, UserStatus.on_hold]:
             consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings)
@@ -169,57 +177,59 @@ def audit_admin_quotas(db: Session) -> None:
         all_settings = db.query(MarzyarAdminSettings).all()
 
         for s in all_settings:
-            if s.traffic_limit is None:
-                # Unlimited quota: unlock any previously locked users if they exist
-                locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
-                if locked_ids:
-                    _unlock_and_restore_users(db, list(locked_ids))
-                continue
+            try:
+                if s.traffic_limit is None:
+                    # Unlimited quota: unlock any previously locked users if they exist
+                    locked_ids = crud.get_locked_user_ids_for_admin(db, s.admin_id)
+                    if locked_ids:
+                        _unlock_and_restore_users(db, list(locked_ids))
+                    continue
 
-            # Evaluate quota condition
-            if s.oversell_allowed:
-                consumed = crud.get_admin_total_consumed_traffic(db, s.admin_id, s)
-                is_exceeded = consumed >= s.traffic_limit
-            else:
-                allocated = crud.get_admin_allocated_traffic(db, s.admin_id)
-                is_exceeded = allocated > s.traffic_limit
+                # Evaluate quota condition
+                if s.oversell_allowed:
+                    consumed = crud.get_admin_total_consumed_traffic(db, s.admin_id, s)
+                    is_exceeded = consumed >= s.traffic_limit
+                else:
+                    allocated = crud.get_admin_allocated_traffic(db, s.admin_id)
+                    is_exceeded = allocated > s.traffic_limit
 
-            currently_locked = crud.get_locked_user_ids_for_admin(db, s.admin_id)
+                currently_locked = crud.get_locked_user_ids_for_admin(db, s.admin_id)
 
-            if is_exceeded:
-                # Find active, on_hold, or limited users not yet locked
-                active_users = (
-                    db.query(User)
-                    .filter(
+                if is_exceeded:
+                    query = db.query(User).filter(
                         User.admin_id == s.admin_id,
                         User.status.in_([UserStatus.active, UserStatus.on_hold, UserStatus.limited]),
-                        ~User.id.in_(currently_locked) if currently_locked else True
                     )
-                    .all()
-                )
-                if active_users:
-                    to_lock = [(u.id, u.status.value) for u in active_users]
-                    crud.lock_users(db, to_lock, s.admin_id, reason="admin_quota_exceeded")
-                    for u in active_users:
-                        try:
-                            xray.operations.remove_user(u)
-                        except Exception as e:
-                            logger.warning(f"[Marzyar] Error removing locked user {u.username} from Xray: {e}")
-                    logger.warning(
-                        f"[Marzyar] Admin ID {s.admin_id} exceeded quota ({s.traffic_limit} bytes). "
-                        f"Locked {len(to_lock)} user(s) (set status to disabled and recorded original status)."
-                    )
-            else:
-                # Under quota: unlock users if currently locked
-                if currently_locked:
-                    _unlock_and_restore_users(db, list(currently_locked))
+                    if currently_locked:
+                        query = query.filter(~User.id.in_(currently_locked))
+                    active_users = query.all()
+
+                    if active_users:
+                        to_lock = [(u.id, u.status.value) for u in active_users]
+                        new_locked = crud.lock_users(db, to_lock, s.admin_id, reason="admin_quota_exceeded")
+                        if new_locked:
+                            for u in active_users:
+                                try:
+                                    xray.operations.remove_user(u)
+                                except Exception as e:
+                                    logger.warning(f"[Marzyar] Error removing locked user {u.username} from Xray: {e}")
+                            logger.warning(
+                                f"[Marzyar] Admin ID {s.admin_id} exceeded quota ({s.traffic_limit} bytes). "
+                                f"Locked {len(new_locked)} user(s) (set status to disabled and recorded original status)."
+                            )
+                else:
+                    # Under quota: unlock users if currently locked
+                    if currently_locked:
+                        _unlock_and_restore_users(db, list(currently_locked))
+            except Exception as e:
+                logger.error(f"[Marzyar] Error during quota audit for admin ID {s.admin_id}: {e}")
 
 
 def _unlock_and_restore_users(db: Session, user_ids: List[int]) -> None:
     """Helper to unlock users, restore their original status, and re-attach active/on-hold ones to Xray."""
     restored = crud.unlock_users(db, user_ids)
     for u, orig_status in restored:
-        if orig_status in [UserStatus.active.value, UserStatus.on_hold.value]:
+        if u.status in [UserStatus.active, UserStatus.on_hold]:
             try:
                 xray.operations.add_user(u)
             except Exception as e:

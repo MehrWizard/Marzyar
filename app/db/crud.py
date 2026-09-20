@@ -2,6 +2,7 @@
 Functions for managing proxy hosts, users, user templates, nodes, and administrative tasks.
 """
 
+from collections import defaultdict
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
@@ -168,7 +169,7 @@ def update_hosts(db: Session, inbound_tag: str, modified_hosts: List[ProxyHostMo
 
 def get_user_queryset(db: Session) -> Query:
     """
-    Retrieves the base user query with joined admin details.
+    Retrieves the base user query with joined admin details and Marzyar lock info.
 
     Args:
         db (Session): Database session.
@@ -176,7 +177,12 @@ def get_user_queryset(db: Session) -> Query:
     Returns:
         Query: Base user query.
     """
-    return db.query(User).options(joinedload(User.admin)).options(joinedload(User.next_plan))
+    query = db.query(User).options(joinedload(User.admin)).options(joinedload(User.next_plan))
+    try:
+        query = query.options(joinedload("marzyar_lock"))
+    except Exception:
+        pass
+    return query
 
 
 def get_user(db: Session, username: str) -> Optional[User]:
@@ -469,18 +475,22 @@ def remove_users(db: Session, dbusers: List[User]):
         dbusers (List[User]): List of user objects to be removed.
     """
     affected_admin_ids = set()
+    admin_traffic_to_increment = defaultdict(int)
     user_ids = []
     for dbuser in dbusers:
         user_ids.append(dbuser.id)
         if dbuser.admin_id:
             affected_admin_ids.add(dbuser.admin_id)
             if dbuser.used_traffic:
-                try:
-                    from app.marzyar import crud as marzyar_crud
-                    marzyar_crud.increment_admin_quota_counter(db, dbuser.admin_id, dbuser.used_traffic)
-                except Exception:
-                    pass
+                admin_traffic_to_increment[dbuser.admin_id] += dbuser.used_traffic
         db.delete(dbuser)
+
+    for aid, traffic in admin_traffic_to_increment.items():
+        try:
+            from app.marzyar import crud as marzyar_crud
+            marzyar_crud.increment_admin_quota_counter(db, aid, traffic)
+        except Exception:
+            pass
 
     try:
         from app.marzyar.models import MarzyarUserLock
@@ -638,16 +648,18 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
     dbuser.used_traffic = 0
     dbuser.node_usages.clear()
     try:
-        from app.marzyar.crud import is_user_locked
-        locked = is_user_locked(db, dbuser.id)
+        from app.marzyar.models import MarzyarUserLock
+        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+        if lock:
+            if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+                lock.original_status = UserStatus.active.value
+            dbuser.status = UserStatus.disabled
+        else:
+            if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+                dbuser.status = UserStatus.active
     except Exception:
-        locked = False
-
-    if not locked:
         if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
-            dbuser.status = UserStatus.active.value
-    else:
-        dbuser.status = UserStatus.disabled.value
+            dbuser.status = UserStatus.active
 
     if dbuser.next_plan:
         db.delete(dbuser.next_plan)
@@ -656,6 +668,14 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
 
     db.commit()
     db.refresh(dbuser)
+
+    if dbuser.admin_id:
+        try:
+            from app.marzyar import quota as marzyar_quota
+            marzyar_quota.audit_admin_quotas(db)
+        except Exception:
+            pass
+
     return dbuser
 
 
@@ -693,11 +713,11 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
         lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
         if lock:
             lock.original_status = UserStatus.active.value
-            dbuser.status = UserStatus.disabled.value
+            dbuser.status = UserStatus.disabled
         else:
-            dbuser.status = UserStatus.active.value
+            dbuser.status = UserStatus.active
     except Exception:
-        dbuser.status = UserStatus.active.value
+        dbuser.status = UserStatus.active
 
     remaining_traffic = (
         max(0, (dbuser.data_limit or 0) - (dbuser.used_traffic or 0))
@@ -719,6 +739,14 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
 
     db.commit()
     db.refresh(dbuser)
+
+    if dbuser.admin_id:
+        try:
+            from app.marzyar import quota as marzyar_quota
+            marzyar_quota.audit_admin_quotas(db)
+        except Exception:
+            pass
+
     return dbuser
 
 
@@ -941,6 +969,7 @@ def get_all_users_usages(
 def update_user_status(db: Session, dbuser: User, status: UserStatus) -> User:
     """
     Updates a user's status and records the time of change.
+    Preserves disabled state for locked users while recording original status.
 
     Args:
         db (Session): Database session.
@@ -950,7 +979,17 @@ def update_user_status(db: Session, dbuser: User, status: UserStatus) -> User:
     Returns:
         User: The updated user object.
     """
-    dbuser.status = status
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+        if lock:
+            lock.original_status = status.value
+            dbuser.status = UserStatus.disabled
+        else:
+            dbuser.status = status
+    except Exception:
+        dbuser.status = status
+
     dbuser.last_status_change = datetime.utcnow()
     db.commit()
     db.refresh(dbuser)
@@ -1131,13 +1170,15 @@ def partial_update_admin(db: Session, dbadmin: Admin, modified_admin: AdminParti
 def remove_admin(db: Session, dbadmin: Admin) -> Admin:
     """
     Removes an admin from the database.
-    Cleanly unlocks any locked users belonging to this admin before removal.
+    Cleanly unlocks any locked users belonging to this admin and removes Marzyar settings before removal.
     """
     try:
         from app.marzyar import crud as marzyar_crud
+        from app.marzyar.models import MarzyarAdminSettings
         locked_ids = marzyar_crud.get_locked_user_ids_for_admin(db, dbadmin.id)
         if locked_ids:
             marzyar_crud.unlock_users(db, list(locked_ids))
+        db.query(MarzyarAdminSettings).filter(MarzyarAdminSettings.admin_id == dbadmin.id).delete(synchronize_session=False)
     except Exception:
         pass
 

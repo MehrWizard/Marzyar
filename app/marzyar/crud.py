@@ -94,7 +94,7 @@ def increment_admin_quota_counter(db: Session, admin_id: int, amount: int) -> No
     db.query(MarzyarAdminSettings).filter(
         MarzyarAdminSettings.admin_id == admin_id
     ).update(
-        {MarzyarAdminSettings.quota_used_traffic: MarzyarAdminSettings.quota_used_traffic + amount},
+        {MarzyarAdminSettings.quota_used_traffic: func.coalesce(MarzyarAdminSettings.quota_used_traffic, 0) + amount},
         synchronize_session=False
     )
     db.commit()
@@ -162,14 +162,18 @@ def lock_users(
     if new_locked:
         try:
             db.commit()
-        except Exception:
+        except Exception as e:
+            logger.error(f"[Marzyar] Failed to commit locked users: {e}")
             db.rollback()
+            return []
     return new_locked
 
 
 def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     """
     Remove users from lock table, restoring their original_status in the users table.
+    Validates expiration and data limits so users whose plan expired while locked
+    are accurately restored to expired or limited rather than granted free access.
     Returns list of (User, original_status). Idempotent and crash-proof.
     """
     if not user_ids:
@@ -184,6 +188,8 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     )
 
     restored = []
+    now_ts = datetime.utcnow().timestamp()
+
     for lock in locks:
         dbuser = db.query(User).filter(User.id == lock.user_id).first()
         if dbuser:
@@ -191,6 +197,14 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
                 target_status = UserStatus(lock.original_status)
             except Exception:
                 target_status = UserStatus.active
+
+            # Prevent expired or exhausted users from receiving active status upon unlock
+            if target_status in [UserStatus.active, UserStatus.on_hold]:
+                if dbuser.expire and dbuser.expire <= now_ts:
+                    target_status = UserStatus.expired
+                elif dbuser.data_limit and dbuser.used_traffic >= dbuser.data_limit:
+                    target_status = UserStatus.limited
+
             dbuser.status = target_status
             restored.append((dbuser, lock.original_status))
         db.delete(lock)
@@ -198,8 +212,10 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     if restored:
         try:
             db.commit()
-        except Exception:
+        except Exception as e:
+            logger.error(f"[Marzyar] Failed to commit unlocked users: {e}")
             db.rollback()
+            return []
     return restored
 
 

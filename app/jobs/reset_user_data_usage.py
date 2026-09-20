@@ -32,12 +32,19 @@ def reset_user_data_usage():
             if not (now - last_reset_time).days >= num_days_to_reset:
                 continue
 
+            old_status = user.status
             crud.reset_user_data_usage(db, user)
-            # make user active if limited on usage reset
-            if user.status == UserStatus.limited:
+            # make user active in xray if they were previously limited and are now active
+            if old_status == UserStatus.limited and user.status == UserStatus.active:
                 xray.operations.add_user(user)
 
             logger.info(f"User data usage reset for User \"{user.username}\"")
+
+        try:
+            from app.marzyar.quota import audit_admin_quotas
+            audit_admin_quotas(db)
+        except Exception:
+            pass
 
 
 scheduler.add_job(reset_user_data_usage, 'interval', coalesce=True, hours=1)

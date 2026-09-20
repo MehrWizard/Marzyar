@@ -307,14 +307,23 @@ def active_next_plan(
     bg: BackgroundTasks,
     db: Session = Depends(get_db),
     dbuser: UserResponse = Depends(get_validated_user),
+    admin: Admin = Depends(Admin.get_current),
 ):
     """Reset user by next plan"""
+    if not admin.is_sudo:
+        from app.marzyar.crud import is_user_locked
+        if is_user_locked(db, dbuser.id):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot activate next plan while user is locked due to admin quota limits."
+            )
+
     dbuser = crud.reset_user_by_next(db=db, dbuser=dbuser)
 
-    if (dbuser is None or dbuser.next_plan is None):
+    if dbuser is None:
         raise HTTPException(
             status_code=404,
-            detail=f"User doesn't have next plan",
+            detail="User doesn't have next plan",
         )
 
     if dbuser.status in [UserStatus.active, UserStatus.on_hold]:
@@ -324,6 +333,12 @@ def active_next_plan(
     bg.add_task(
         report.user_data_reset_by_next, user=user, user_admin=dbuser.admin,
     )
+
+    try:
+        from app.marzyar import quota as marzyar_quota
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
 
     logger.info(f'User "{dbuser.username}"\'s usage was reset by next plan')
     return dbuser
