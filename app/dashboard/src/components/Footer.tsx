@@ -35,14 +35,6 @@ export const Footer: FC<BoxProps> = (props) => {
         >
           Marzban
         </Link>{" "}
-        and{" "}
-        <Link
-          color="blue.400"
-          href="https://github.com/MehrWizard/Marzdar"
-          isExternal
-        >
-          Marzdar
-        </Link>{" "}
         with native reseller quotas, user limits, and complete UI
       </Text>
     </VStack>

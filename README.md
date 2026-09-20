@@ -60,9 +60,10 @@ While **Marzdar** focuses on completing the missing user interface elements of u
 
 1. **User Account Limits**: Cap the number of user accounts a reseller admin can create.
 2. **Bandwidth Quotas & Oversell Controls**:
-   - **Strict Mode (No Oversell)**: Admin quota limits the sum of allocated user data limits (`∑ user.data_limit ≤ traffic_limit`). Resellers cannot over-allocate or create accounts with unlimited bandwidth.
-   - **Oversell Mode**: Admin quota limits total consumed bandwidth (`∑ user.used_traffic + resets ≤ traffic_limit`). Resellers can allocate user plans freely until actual traffic consumed reaches the quota limit.
-   - **Non-bypassable Accounting**: Reseller admins cannot reset user traffic counters to escape their own quota; user resets are securely accumulated into the reseller's consumed quota counter.
+   - **Unified Consumed Limit**: In *all* modes, total consumed bandwidth (`∑ active_usage + historical_resets_and_deletions`) can never exceed the admin's `traffic_limit`.
+   - **Strict Mode (No Oversell)**: *Additionally* limits the sum of allocated user data limits (`∑ user.data_limit ≤ traffic_limit`). Resellers cannot over-allocate or create accounts with unlimited bandwidth.
+   - **Oversell Mode**: Removes the allocation limit. Resellers can allocate user plans freely until actual traffic consumed reaches the quota limit.
+   - **Non-bypassable Accounting**: Reseller admins cannot reset or delete users to escape their quota; past usage is securely accumulated into the reseller's historical consumption counter.
 3. **The "Locked" State Machine**:
    - When an admin exhausts their quota, their active users are non-destructively marked as `locked` and detached from Xray inbounds (traffic blocked immediately).
    - Core `users` table records remain untouched.

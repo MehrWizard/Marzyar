@@ -221,14 +221,14 @@ def reset_user_data_usage(
         target_admin_id = dbuser.admin_id or admin.id
         settings = get_admin_settings(db, target_admin_id)
         if settings and settings.traffic_limit is not None:
-            if settings.oversell_allowed:
-                consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
-                if consumed >= settings.traffic_limit:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Admin quota is exhausted. Cannot reset user data usage until quota is renewed."
-                    )
-            elif dbuser.status == UserStatus.limited:
+            consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
+            if consumed >= settings.traffic_limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Admin quota is exhausted. Cannot reset user data usage until quota is renewed."
+                )
+
+            if not settings.oversell_allowed and dbuser.status == UserStatus.limited:
                 allocated = get_admin_allocated_traffic(db, target_admin_id, for_update=True)
                 if allocated > settings.traffic_limit:
                     raise HTTPException(
@@ -382,6 +382,13 @@ def active_next_plan(
         target_admin_id = dbuser.admin_id or admin.id
         settings = get_admin_settings(db, target_admin_id)
         if settings and settings.traffic_limit is not None:
+            consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
+            if consumed >= settings.traffic_limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Admin quota is exhausted. Cannot activate next plan until quota is renewed."
+                )
+
             if not settings.oversell_allowed:
                 if dbuser.next_plan.data_limit is None or dbuser.next_plan.data_limit <= 0:
                     raise HTTPException(
@@ -399,13 +406,6 @@ def active_next_plan(
                             status_code=403,
                             detail="Admin allocated traffic quota would be exceeded. Cannot activate next plan."
                         )
-            else:
-                consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
-                if consumed >= settings.traffic_limit:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Admin quota is exhausted. Cannot activate next plan until quota is renewed."
-                    )
 
     dbuser = crud.reset_user_by_next(db=db, dbuser=dbuser)
 
