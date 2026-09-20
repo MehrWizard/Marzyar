@@ -1,4 +1,5 @@
 import {
+  Badge,
   Box,
   Button,
   chakra,
@@ -20,12 +21,14 @@ import {
   CurrencyDollarIcon,
   DocumentMinusIcon,
   LinkIcon,
+  LockClosedIcon,
   SquaresPlusIcon,
   UserGroupIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
 import { DONATION_URL, REPO_URL } from "constants/Project";
 import { useDashboard } from "contexts/DashboardContext";
+import { useMarzyarMyLimitsQuery } from "contexts/MarzyarContext";
 import differenceInDays from "date-fns/differenceInDays";
 import isValid from "date-fns/isValid";
 import { FC, ReactNode, useState } from "react";
@@ -36,6 +39,7 @@ import { Language } from "./Language";
 import { ThemeToggle } from "./ThemeToggle";
 import { useThemeMode } from "hooks/useThemeMode";
 import useGetUser from "hooks/useGetUser";
+import { formatBytes } from "utils/formatByte";
 
 type HeaderProps = {
   actions?: ReactNode;
@@ -110,6 +114,9 @@ export const Header: FC<HeaderProps> = ({ actions }) => {
     }
     return false;
   };
+
+  const isSudoAdmin = !getUserIsPending && getUserIsSuccess ? userData.is_sudo : false;
+  const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudoAdmin);
 
   const {
     activeTab,
@@ -202,9 +209,113 @@ export const Header: FC<HeaderProps> = ({ actions }) => {
           </Tooltip>
         </HStack>
       ) : (
-        <Text as="h1" fontWeight="semibold" fontSize="2xl" flexShrink={0}>
-          {t("users")}
-        </Text>
+        <HStack spacing={3} align="center" flexShrink={0}>
+          <Text as="h1" fontWeight="semibold" fontSize="2xl">
+            {t("users")}
+          </Text>
+          {myLimits && (myLimits.traffic_limit !== null || myLimits.users_limit !== null) && (
+            <HStack spacing={1.5} display={{ base: "none", sm: "flex" }}>
+              {myLimits.users_limit !== null && (
+                <Tooltip
+                  label={t(
+                    "marzyar.userSlotsTooltip",
+                    "Current user accounts created / Allowed slots"
+                  )}
+                  placement="bottom"
+                >
+                  <Badge
+                    colorScheme={myLimits.is_user_limit_exceeded ? "red" : "blue"}
+                    variant="subtle"
+                    fontSize="xs"
+                    px={2}
+                    py={0.5}
+                    rounded="md"
+                    display="flex"
+                    alignItems="center"
+                    gap={1}
+                  >
+                    <UsersIcon width="13px" />
+                    <span>
+                      {myLimits.current_users_count} / {myLimits.users_limit}
+                    </span>
+                  </Badge>
+                </Tooltip>
+              )}
+
+              {myLimits.traffic_limit !== null && (
+                <Tooltip
+                  label={
+                    myLimits.oversell_allowed
+                      ? t(
+                          "marzyar.oversellQuotaTooltip",
+                          "Total consumed traffic (including resets) / Quota limit"
+                        )
+                      : t(
+                          "marzyar.allocatedQuotaTooltip",
+                          "Total allocated traffic limits / Quota limit"
+                        )
+                  }
+                  placement="bottom"
+                >
+                  <Badge
+                    colorScheme={
+                      myLimits.is_quota_exceeded
+                        ? "red"
+                        : myLimits.traffic_limit > 0 &&
+                          myLimits.current_consumed_traffic / myLimits.traffic_limit > 0.8
+                        ? "orange"
+                        : "purple"
+                    }
+                    variant="subtle"
+                    fontSize="xs"
+                    px={2}
+                    py={0.5}
+                    rounded="md"
+                    display="flex"
+                    alignItems="center"
+                    gap={1}
+                  >
+                    <span>
+                      {formatBytes(
+                        myLimits.oversell_allowed
+                          ? myLimits.current_consumed_traffic
+                          : myLimits.current_allocated_traffic
+                      )}{" "}
+                      / {formatBytes(myLimits.traffic_limit)}
+                    </span>
+                  </Badge>
+                </Tooltip>
+              )}
+
+              {myLimits.locked_users_count > 0 && (
+                <Tooltip
+                  label={t(
+                    "marzyar.lockedUsersBanner",
+                    "Traffic quota exceeded! Your active users are locked and detached from proxy."
+                  )}
+                  placement="bottom"
+                >
+                  <Badge
+                    colorScheme="red"
+                    variant="solid"
+                    fontSize="xs"
+                    px={2}
+                    py={0.5}
+                    rounded="md"
+                    display="flex"
+                    alignItems="center"
+                    gap={1}
+                  >
+                    <LockClosedIcon width="13px" />
+                    <span>
+                      {myLimits.locked_users_count} {t("status.locked", "Locked")}
+                    </span>
+                  </Badge>
+                </Tooltip>
+              )}
+            </HStack>
+          )}
+        </HStack>
       )}
       {showDonationNotif && (
         <NotificationCircle top="0" right="0" zIndex={9999} />

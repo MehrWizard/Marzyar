@@ -398,6 +398,7 @@ export const UsersTable: FC<UsersTableProps> = (props) => {
                           showDetail={false}
                           expiryDate={user.expire}
                           status={user.status}
+                          isLocked={user.is_locked}
                         />
                       </Td>
                       <Td borderBottom={0} minW="100px" pr={0}>
@@ -476,6 +477,7 @@ export const UsersTable: FC<UsersTableProps> = (props) => {
                                     compact
                                     expiryDate={user.expire}
                                     status={user.status}
+                                    isLocked={user.is_locked}
                                   />
                                 </Box>
                                 <HStack>
@@ -668,6 +670,7 @@ export const UsersTable: FC<UsersTableProps> = (props) => {
                     <StatusBadge
                       expiryDate={user.expire}
                       status={user.status}
+                      isLocked={user.is_locked}
                     />
                   </Td>
                   <Td width="350px" minW="230px">

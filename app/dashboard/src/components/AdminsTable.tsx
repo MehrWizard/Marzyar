@@ -31,6 +31,7 @@ import {
   CheckCircleIcon,
   ChatBubbleLeftRightIcon,
   ChevronDownIcon,
+  LockClosedIcon,
   NoSymbolIcon,
   PencilSquareIcon,
   TrashIcon,
@@ -45,6 +46,11 @@ import {
   useAdminsQuery,
 } from "contexts/AdminsContext";
 import { useDashboard } from "contexts/DashboardContext";
+import {
+  FetchMarzyarAdminsQueryKey,
+  useMarzyar,
+  useMarzyarAdminsQuery,
+} from "contexts/MarzyarContext";
 
 const SortIcon = chakra(ChevronDownIcon, {
   baseStyle: {
@@ -122,6 +128,8 @@ export const AdminsTable: FC = () => {
   } = useAdmins();
 
   const { data: admins = [], isLoading } = useAdminsQuery();
+  useMarzyarAdminsQuery(userData?.is_sudo);
+  const adminSettingsByUsername = useMarzyar((s) => s.adminSettingsByUsername);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Filter & Sort Logic
@@ -277,6 +285,36 @@ export const AdminsTable: FC = () => {
       );
       useDashboard.getState().refetchUsers();
       queryClient.invalidateQueries(FetchAdminsQueryKey);
+    } catch (e) {
+      generateErrorMessage(e, toast);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResetQuota = async (username: string) => {
+    if (
+      !window.confirm(
+        t("marzyar.resetQuotaConfirm", {
+          username,
+          defaultValue: `Are you sure you want to reset consumed quota for ${username}? All locked users will be unlocked.`,
+        })
+      )
+    )
+      return;
+    setActionLoading(`reset-quota-${username}`);
+    try {
+      await useMarzyar.getState().resetAdminQuota(username);
+      generateSuccessMessage(
+        t("marzyar.resetQuotaSuccess", {
+          username,
+          defaultValue: `Quota reset and users unlocked for ${username}`,
+        }),
+        toast
+      );
+      queryClient.invalidateQueries(FetchMarzyarAdminsQueryKey);
+      queryClient.invalidateQueries(FetchAdminsQueryKey);
+      useDashboard.getState().refetchUsers();
     } catch (e) {
       generateErrorMessage(e, toast);
     } finally {
@@ -454,6 +492,7 @@ export const AdminsTable: FC = () => {
         <VStack spacing={2} align="stretch">
           {paginatedAdmins.map((admin) => {
             const isCurrent = userData?.username === admin.username;
+            const settings = adminSettingsByUsername[admin.username];
             return (
               <AccordionItem
                 key={admin.username}
@@ -484,8 +523,23 @@ export const AdminsTable: FC = () => {
                       </Badge>
                     </HStack>
                     <HStack spacing={2}>
-                      <Badge variant="outline" fontSize="2xs">
-                        {formatBytes(admin.users_usage || 0)}
+                      {settings?.locked_users_count ? (
+                        <Badge colorScheme="red" variant="solid" fontSize="2xs">
+                          🔒 {settings.locked_users_count}
+                        </Badge>
+                      ) : null}
+                      <Badge
+                        variant="outline"
+                        colorScheme={settings?.is_quota_exceeded ? "red" : undefined}
+                        fontSize="2xs"
+                      >
+                        {settings?.traffic_limit != null
+                          ? `${formatBytes(
+                              settings.oversell_allowed
+                                ? settings.current_consumed_traffic
+                                : settings.current_allocated_traffic
+                            )} / ${formatBytes(settings.traffic_limit)}`
+                          : formatBytes(admin.users_usage || 0)}
                       </Badge>
                       <AccordionIcon />
                     </HStack>
@@ -501,10 +555,39 @@ export const AdminsTable: FC = () => {
                         colorScheme="primary"
                         onClick={() => handleViewUsers(admin.username)}
                       >
-                        {admin.users_count ?? 0} {t("total")} (
-                        {admin.active_users_count ?? 0} {t("status.active")})
+                        {settings?.users_limit != null
+                          ? `${admin.users_count ?? 0} / ${settings.users_limit}`
+                          : `${admin.users_count ?? 0} ${t("total")}`}{" "}
+                        ({admin.active_users_count ?? 0} {t("status.active")})
                       </Button>
                     </HStack>
+
+                    {settings &&
+                      (settings.traffic_limit != null || settings.users_limit != null) && (
+                        <HStack justify="space-between" align="center">
+                          <Text color="gray.500">{t("marzyar.resellerLimits", "Reseller")}:</Text>
+                          <HStack spacing={1} wrap="wrap">
+                            {settings.traffic_limit != null && (
+                              <Badge
+                                colorScheme={settings.is_quota_exceeded ? "red" : "blue"}
+                                fontSize="2xs"
+                              >
+                                {settings.oversell_allowed ? "Oversell" : "Allocated"}
+                              </Badge>
+                            )}
+                            {settings.is_quota_exceeded && (
+                              <Badge colorScheme="red" fontSize="2xs">
+                                {t("marzyar.quotaExceeded", "Quota Exceeded")}
+                              </Badge>
+                            )}
+                            {settings.is_user_limit_exceeded && (
+                              <Badge colorScheme="red" fontSize="2xs">
+                                {t("marzyar.limitReached", "Limit Reached")}
+                              </Badge>
+                            )}
+                          </HStack>
+                        </HStack>
+                      )}
 
                     {(admin.telegram_id || admin.discord_webhook) && (
                       <HStack justify="space-between">
@@ -543,6 +626,17 @@ export const AdminsTable: FC = () => {
                       >
                         {t("users")}
                       </Button>
+                      {settings?.traffic_limit != null && (
+                        <IconButton
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="purple"
+                          aria-label="reset quota"
+                          isLoading={actionLoading === `reset-quota-${admin.username}`}
+                          icon={<ArrowPathIcon width="14px" />}
+                          onClick={() => handleResetQuota(admin.username)}
+                        />
+                      )}
                       <IconButton
                         size="xs"
                         variant="ghost"
@@ -693,6 +787,7 @@ export const AdminsTable: FC = () => {
           <Tbody>
             {paginatedAdmins.map((admin) => {
               const isCurrent = userData?.username === admin.username;
+              const settings = adminSettingsByUsername[admin.username];
               return (
                 <Tr
                   key={admin.username}
@@ -748,6 +843,7 @@ export const AdminsTable: FC = () => {
                         spacing={1.5}
                         cursor="pointer"
                         _hover={{ opacity: 0.8 }}
+                        wrap="wrap"
                       >
                         <Badge
                           colorScheme={(admin.users_count ?? 0) > 0 ? "blue" : "gray"}
@@ -757,7 +853,9 @@ export const AdminsTable: FC = () => {
                           py={0.5}
                           rounded="md"
                         >
-                          {numberWithCommas(admin.users_count ?? 0)} {t("total")}
+                          {settings?.users_limit != null
+                            ? `${numberWithCommas(admin.users_count ?? 0)} / ${settings.users_limit}`
+                            : `${numberWithCommas(admin.users_count ?? 0)} ${t("total")}`}
                         </Badge>
                         {(admin.active_users_count ?? 0) > 0 && (
                           <Badge
@@ -771,22 +869,73 @@ export const AdminsTable: FC = () => {
                             {numberWithCommas(admin.active_users_count ?? 0)} {t("status.active")}
                           </Badge>
                         )}
+                        {settings?.is_user_limit_exceeded && (
+                          <Badge colorScheme="red" fontSize="2xs" px={1.5} rounded="md">
+                            {t("marzyar.limitReached", "Limit Reached")}
+                          </Badge>
+                        )}
                       </HStack>
                     </Tooltip>
                   </Td>
 
                   {/* Traffic Usage */}
                   <Td py={3}>
-                    <Badge
-                      colorScheme="gray"
-                      variant="outline"
-                      fontSize="xs"
-                      px={2}
-                      py={0.5}
-                      rounded="md"
-                    >
-                      {formatBytes(admin.users_usage || 0)}
-                    </Badge>
+                    {settings?.traffic_limit != null ? (
+                      <VStack align="flex-start" spacing={1}>
+                        <HStack spacing={1}>
+                          <Badge
+                            colorScheme={settings.is_quota_exceeded ? "red" : "gray"}
+                            variant="outline"
+                            fontSize="xs"
+                            px={2}
+                            py={0.5}
+                            rounded="md"
+                          >
+                            {formatBytes(
+                              settings.oversell_allowed
+                                ? settings.current_consumed_traffic
+                                : settings.current_allocated_traffic
+                            )}{" "}
+                            / {formatBytes(settings.traffic_limit)}
+                          </Badge>
+                          <Badge
+                            colorScheme={settings.oversell_allowed ? "blue" : "gray"}
+                            fontSize="2xs"
+                            px={1.5}
+                            rounded="md"
+                          >
+                            {settings.oversell_allowed ? "Oversell" : "Allocated"}
+                          </Badge>
+                        </HStack>
+                        {settings.is_quota_exceeded && (
+                          <Badge colorScheme="red" fontSize="2xs" px={1.5} rounded="md">
+                            {t("marzyar.quotaExceeded", "Quota Exceeded")}
+                          </Badge>
+                        )}
+                        {settings.locked_users_count > 0 && (
+                          <Badge
+                            colorScheme="red"
+                            variant="solid"
+                            fontSize="2xs"
+                            px={1.5}
+                            rounded="md"
+                          >
+                            🔒 {settings.locked_users_count} {t("status.locked", "Locked")}
+                          </Badge>
+                        )}
+                      </VStack>
+                    ) : (
+                      <Badge
+                        colorScheme="gray"
+                        variant="outline"
+                        fontSize="xs"
+                        px={2}
+                        py={0.5}
+                        rounded="md"
+                      >
+                        {formatBytes(admin.users_usage || 0)}
+                      </Badge>
+                    )}
                   </Td>
 
                   {/* Integrations */}
@@ -840,6 +989,24 @@ export const AdminsTable: FC = () => {
                           onClick={() => setEditingAdmin(admin)}
                         />
                       </Tooltip>
+
+                      {/* Reset Consumed Quota */}
+                      {settings?.traffic_limit != null && (
+                        <Tooltip
+                          label={t("marzyar.resetQuota", "Reset Consumed Quota")}
+                          placement="top"
+                        >
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="purple"
+                            aria-label="reset quota"
+                            isLoading={actionLoading === `reset-quota-${admin.username}`}
+                            icon={<ArrowPathIcon width="16px" />}
+                            onClick={() => handleResetQuota(admin.username)}
+                          />
+                        </Tooltip>
+                      )}
 
                       {/* Reset Usage */}
                       <Tooltip label={t("admins.resetUsage")} placement="top">

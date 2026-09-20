@@ -66,6 +66,7 @@ export type User = {
     is_sudo: boolean;
   } | null;
   next_plan?: NextPlan | null;
+  is_locked?: boolean;
 };
 
 export type UserCreate = Pick<

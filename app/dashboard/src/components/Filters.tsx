@@ -22,6 +22,7 @@ import {
   TagCloseButton,
   TagLabel,
   Text,
+  Tooltip,
   useToast,
   VStack,
 } from "@chakra-ui/react";
@@ -41,6 +42,7 @@ import {
 import classNames from "classnames";
 import { useAdmins } from "contexts/AdminsContext";
 import { useDashboard } from "contexts/DashboardContext";
+import { useMarzyarMyLimitsQuery } from "contexts/MarzyarContext";
 import useGetUser from "hooks/useGetUser";
 import debounce from "lodash.debounce";
 import { FC, useState } from "react";
@@ -84,6 +86,13 @@ export const Filters: FC<FilterProps> = ({ ...props }) => {
   const { t } = useTranslation();
   const { userData } = useGetUser();
   const isSudo = userData?.is_sudo;
+  const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudo);
+  const isCreateDisabled = !isSudo && !!(myLimits?.is_user_limit_exceeded || myLimits?.is_quota_exceeded);
+  const disableReason = myLimits?.is_quota_exceeded
+    ? t("marzyar.createUserQuotaExceeded", "Cannot create user: Admin traffic quota is exceeded")
+    : myLimits?.is_user_limit_exceeded
+    ? t("marzyar.createUserLimitExceeded", "Cannot create user: Admin accounts limit is reached")
+    : "";
   const toast = useToast();
   const { disableAdminUsers, activateAdminUsers } = useAdmins();
   const [isFilterAdminOpen, setIsFilterAdminOpen] = useState(false);
@@ -218,14 +227,19 @@ export const Filters: FC<FilterProps> = ({ ...props }) => {
               })}
             />
           </IconButton>
-          <Button
-            colorScheme="primary"
-            size="sm"
-            onClick={() => onCreateUser(true)}
-            px={5}
-          >
-            {t("createUser")}
-          </Button>
+          <Tooltip label={disableReason} isDisabled={!isCreateDisabled}>
+            <Box display="inline-block">
+              <Button
+                colorScheme="primary"
+                size="sm"
+                isDisabled={isCreateDisabled}
+                onClick={() => onCreateUser(true)}
+                px={5}
+              >
+                {t("createUser")}
+              </Button>
+            </Box>
+          </Tooltip>
 
           {/* More Actions Menu */}
           <Menu isLazy>

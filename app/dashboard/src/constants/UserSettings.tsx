@@ -2,6 +2,7 @@ import { chakra, ChakraComponent} from "@chakra-ui/react";
 import {
   ClockIcon,
   ExclamationCircleIcon,
+  LockClosedIcon,
   NoSymbolIcon,
   WifiIcon,
 } from "@heroicons/react/24/outline";
@@ -20,6 +21,7 @@ const DisabledStatusIcon = chakra(NoSymbolIcon, iconProps);
 const LimitedStatusIcon = chakra(ExclamationCircleIcon, iconProps);
 const ExpiredStatusIcon = chakra(ClockIcon, iconProps);
 const On_holdStatusIcon = chakra(ClockIcon, iconProps);
+const LockedStatusIcon = chakra(LockClosedIcon, iconProps);
 
 export const resetStrategy: { title: string; value: DataLimitResetStrategy }[] =
   [
@@ -71,6 +73,11 @@ export const statusColors: {
     statusColor: "orange",
     bandWidthColor: "orange",
     icon: ExpiredStatusIcon,
+  },
+  locked: {
+    statusColor: "amber",
+    bandWidthColor: "amber",
+    icon: LockedStatusIcon,
   },
   on_hold: {
     statusColor: "purple",

@@ -35,3 +35,42 @@ export const AdminModifySchema = z.object({
 });
 
 export type AdminModify = z.infer<typeof AdminModifySchema>;
+
+export interface MarzyarAdminSettings {
+  admin_id: number;
+  username: string;
+  is_sudo: boolean;
+  users_limit: number | null;
+  traffic_limit: number | null;
+  oversell_allowed: boolean;
+  allowed_inbounds: string[] | null;
+  quota_used_traffic: number;
+  current_users_count: number;
+  current_allocated_traffic: number;
+  current_consumed_traffic: number;
+  is_quota_exceeded: boolean;
+  is_user_limit_exceeded: boolean;
+  locked_users_count: number;
+}
+
+export interface MarzyarAdminSettingsModify {
+  users_limit?: number | null;
+  traffic_limit?: number | null;
+  oversell_allowed?: boolean;
+  allowed_inbounds?: string[] | null;
+}
+
+export interface MarzyarMyLimits {
+  username: string;
+  is_sudo: boolean;
+  users_limit: number | null;
+  traffic_limit: number | null;
+  oversell_allowed: boolean;
+  allowed_inbounds: string[] | null;
+  current_users_count: number;
+  current_allocated_traffic: number;
+  current_consumed_traffic: number;
+  is_quota_exceeded: boolean;
+  is_user_limit_exceeded: boolean;
+  locked_users_count: number;
+}

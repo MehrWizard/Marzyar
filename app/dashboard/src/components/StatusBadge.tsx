@@ -12,6 +12,7 @@ type UserStatusProps = {
   compact?: boolean;
   showDetail?: boolean;
   extraText?: string | null;
+  isLocked?: boolean;
 };
 export const StatusBadge: FC<UserStatusProps> = ({
   expiryDate,
@@ -19,20 +20,23 @@ export const StatusBadge: FC<UserStatusProps> = ({
   compact = false,
   showDetail = true,
   extraText,
+  isLocked = false,
 }) => {
   const { t } = useTranslation();
   const dateInfo = relativeExpiryDate(expiryDate);
-  const Icon = statusColors[userStatus].icon;
+  const activeConfig = isLocked ? statusColors["locked"] : (statusColors[userStatus] || statusColors["disabled"]);
+  const Icon = activeConfig.icon;
   return (
     <>
       <Badge
-        colorScheme={statusColors[userStatus].statusColor}
+        colorScheme={activeConfig.statusColor}
         rounded="full"
         display="inline-flex"
         px={3}
         py={1}
         columnGap={compact ? 1 : 2}
         alignItems="center"
+        title={isLocked ? t("status.locked_tooltip", "Locked: Admin Quota Exceeded") : undefined}
       >
         <Icon w={compact ? 3 : 4} />
         {showDetail && (
@@ -43,7 +47,7 @@ export const StatusBadge: FC<UserStatusProps> = ({
             fontWeight="medium"
             letterSpacing="tighter"
           >
-            {userStatus && t(`status.${userStatus}`)}
+            {isLocked ? t("status.locked", "Locked") : (userStatus && t(`status.${userStatus}`))}
             {extraText && `: ${extraText}`}
           </Text>
         )}
