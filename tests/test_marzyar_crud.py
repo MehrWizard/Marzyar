@@ -7,6 +7,7 @@ Tests for Marzyar CRUD functions:
   - Inbound enforcement
 """
 from datetime import datetime
+import time
 
 import pytest
 from app.models.user import UserStatus
@@ -250,6 +251,80 @@ class TestUserUnlocking:
         crud.unlock_users(db, [u.id])
         db.refresh(u)
         assert u.status == UserStatus.on_hold
+
+    def test_unlock_on_hold_elapsed_timeout_transitions_to_active(self, db, make_admin, make_user, make_lock, make_settings):
+        from datetime import datetime, timedelta
+        admin = make_admin()
+        make_settings(admin)
+        past_timeout = datetime.utcnow() - timedelta(hours=2)
+        u = make_user(
+            admin,
+            status=UserStatus.disabled,
+            on_hold_timeout=past_timeout,
+            on_hold_expire_duration=86400 * 30,
+        )
+        make_lock(u, admin, original_status="on_hold")
+        crud.unlock_users(db, [u.id])
+        db.refresh(u)
+        assert u.status == UserStatus.active
+        assert u.on_hold_timeout is None
+        assert u.on_hold_expire_duration is None
+        assert u.expire is not None
+        assert u.expire > int(time.time())
+
+    def test_unlock_on_hold_elapsed_timeout_transitions_to_expired(self, db, make_admin, make_user, make_lock, make_settings):
+        from datetime import datetime, timedelta
+        admin = make_admin()
+        make_settings(admin)
+        past_timeout = datetime.utcnow() - timedelta(days=40)
+        u = make_user(
+            admin,
+            status=UserStatus.disabled,
+            on_hold_timeout=past_timeout,
+            on_hold_expire_duration=86400 * 10,
+        )
+        make_lock(u, admin, original_status="on_hold")
+        crud.unlock_users(db, [u.id])
+        db.refresh(u)
+        assert u.status == UserStatus.expired
+        assert u.on_hold_timeout is None
+        assert u.on_hold_expire_duration is None
+        assert u.expire is not None
+        assert u.expire <= int(time.time())
+
+    def test_unlock_on_hold_online_activation(self, db, make_admin, make_user, make_lock, make_settings):
+        from datetime import datetime, timedelta
+        admin = make_admin()
+        make_settings(admin)
+        u = make_user(
+            admin,
+            status=UserStatus.disabled,
+            created_at=datetime.utcnow() - timedelta(days=2),
+            online_at=datetime.utcnow() - timedelta(days=1),
+            on_hold_expire_duration=86400 * 7,
+        )
+        make_lock(u, admin, original_status="on_hold")
+        crud.unlock_users(db, [u.id])
+        db.refresh(u)
+        assert u.status == UserStatus.active
+        assert u.on_hold_expire_duration is None
+        assert u.expire is not None
+
+    def test_last_traffic_reset_time_order_independence(self, db, make_admin, make_user):
+        from app.db.models import UserUsageResetLogs
+        from datetime import datetime, timedelta
+        admin = make_admin()
+        u = make_user(admin)
+        t1 = datetime.utcnow() - timedelta(days=10)
+        t2 = datetime.utcnow() - timedelta(days=2)
+        t3 = datetime.utcnow() - timedelta(days=5)
+        log1 = UserUsageResetLogs(user=u, used_traffic_at_reset=100, reset_at=t1)
+        log2 = UserUsageResetLogs(user=u, used_traffic_at_reset=200, reset_at=t2)
+        log3 = UserUsageResetLogs(user=u, used_traffic_at_reset=300, reset_at=t3)
+        db.add_all([log1, log2, log3])
+        db.commit()
+        db.refresh(u)
+        assert u.last_traffic_reset_time == t2
 
     def test_unlock_expired_user_stays_expired(self, db, make_admin, make_user, make_lock, make_settings):
         admin = make_admin()

@@ -156,40 +156,48 @@ class UserCreate(User):
         excluded = {}
         for proxy_type in self.proxies:
             excluded[proxy_type] = []
-            for inbound in xray.config.inbounds_by_protocol.get(proxy_type, []):
-                if not inbound["tag"] in self.inbounds.get(proxy_type, []):
+            proto_key = proxy_type.value if hasattr(proxy_type, 'value') else str(proxy_type)
+            inbounds_for_proto = (
+                xray.config.inbounds_by_protocol.get(proxy_type)
+                or xray.config.inbounds_by_protocol.get(proto_key, [])
+            )
+            user_inbounds = self.inbounds.get(proxy_type) or self.inbounds.get(proto_key, [])
+            for inbound in inbounds_for_proto:
+                if not inbound["tag"] in user_inbounds:
                     excluded[proxy_type].append(inbound["tag"])
 
         return excluded
 
-    @field_validator("inbounds", mode="before")
-    def validate_inbounds(cls, inbounds, values, **kwargs):
-        proxies = values.data.get("proxies", [])
+    @model_validator(mode="after")
+    def validate_inbounds(self):
+        proxies = self.proxies
 
         # delete inbounds that are for protocols not activated
-        for proxy_type in inbounds.copy():
-            if proxy_type not in proxies:
-                del inbounds[proxy_type]
+        for proxy_type in list(self.inbounds.keys()):
+            if proxy_type not in proxies and (hasattr(proxy_type, 'value') and proxy_type.value not in proxies):
+                del self.inbounds[proxy_type]
 
         # check by proxies to ensure that every protocol has inbounds set
         for proxy_type in proxies:
-            tags = inbounds.get(proxy_type)
+            proto_key = proxy_type.value if hasattr(proxy_type, 'value') else str(proxy_type)
+            tags = self.inbounds.get(proxy_type) or self.inbounds.get(proto_key)
 
             if tags:
                 for tag in tags:
                     if tag not in xray.config.inbounds_by_tag:
                         raise ValueError(f"Inbound {tag} doesn't exist")
-
-            # elif isinstance(tags, list) and not tags:
-            #     raise ValueError(f"{proxy_type} inbounds cannot be empty")
-
+                self.inbounds[proxy_type] = tags
             else:
-                inbounds[proxy_type] = [
+                inbounds_for_proto = (
+                    xray.config.inbounds_by_protocol.get(proxy_type)
+                    or xray.config.inbounds_by_protocol.get(proto_key, [])
+                )
+                self.inbounds[proxy_type] = [
                     i["tag"]
-                    for i in xray.config.inbounds_by_protocol.get(proxy_type, [])
+                    for i in inbounds_for_proto
                 ]
 
-        return inbounds
+        return self
 
     @field_validator("status", mode="before")
     def validate_status(cls, status, values):
@@ -237,8 +245,14 @@ class UserModify(User):
         excluded = {}
         for proxy_type in self.inbounds:
             excluded[proxy_type] = []
-            for inbound in xray.config.inbounds_by_protocol.get(proxy_type, []):
-                if not inbound["tag"] in self.inbounds.get(proxy_type, []):
+            proto_key = proxy_type.value if hasattr(proxy_type, 'value') else str(proxy_type)
+            inbounds_for_proto = (
+                xray.config.inbounds_by_protocol.get(proxy_type)
+                or xray.config.inbounds_by_protocol.get(proto_key, [])
+            )
+            user_inbounds = self.inbounds.get(proxy_type) or self.inbounds.get(proto_key, [])
+            for inbound in inbounds_for_proto:
+                if not inbound["tag"] in user_inbounds:
                     excluded[proxy_type].append(inbound["tag"])
 
         return excluded

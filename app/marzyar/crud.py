@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from typing import Any, List, Optional, Set, Tuple
 from sqlalchemy import func
@@ -217,6 +217,28 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
                 target_status = UserStatus(lock.original_status)
             except Exception:
                 target_status = UserStatus.active
+
+            # If user was on_hold, check if they activated (online after base_time) or on_hold_timeout elapsed
+            if target_status == UserStatus.on_hold:
+                base_time = dbuser.edit_at or dbuser.created_at
+                now_dt = datetime.utcnow()
+                activated_at = None
+                if dbuser.online_at and base_time and dbuser.online_at >= base_time:
+                    activated_at = dbuser.online_at
+                elif dbuser.on_hold_timeout and dbuser.on_hold_timeout <= now_dt:
+                    activated_at = dbuser.on_hold_timeout
+
+                if activated_at:
+                    if dbuser.on_hold_expire_duration:
+                        activated_ts = int(
+                            activated_at.timestamp()
+                            if activated_at.tzinfo is not None
+                            else activated_at.replace(tzinfo=timezone.utc).timestamp()
+                        )
+                        dbuser.expire = activated_ts + dbuser.on_hold_expire_duration
+                    dbuser.on_hold_expire_duration = None
+                    dbuser.on_hold_timeout = None
+                    target_status = UserStatus.active
 
             # Prevent expired or exhausted users from receiving active status upon unlock
             if target_status in [UserStatus.active, UserStatus.on_hold]:

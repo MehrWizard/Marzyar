@@ -371,3 +371,166 @@ class TestAuditAdminQuotas:
             null_admin_res = get_locked_users_list(db=db, current_admin=p_sudo)
             assert len(null_admin_res) == 1
             assert null_admin_res[0].admin_username == "system"
+
+    def test_set_owner_enforces_target_admin_users_limit(self, db, make_admin, make_user, make_settings):
+        from app.routers.user import set_owner
+        from app.models.admin import Admin as PydanticAdmin
+
+        sudo_admin = make_admin("sudo_admin", is_sudo=True)
+        reseller = make_admin("reseller", is_sudo=False)
+        make_settings(reseller, users_limit=2)
+
+        # Reseller already owns 2 users (at limit)
+        make_user(reseller, username="r_u1")
+        make_user(reseller, username="r_u2")
+
+        # Sudo owns another user
+        user_to_transfer = make_user(sudo_admin, username="transfer_me")
+
+        # Trying to transfer to reseller whose limit is reached must raise 403
+        with pytest.raises(HTTPException) as exc:
+            set_owner(
+                admin_username="reseller",
+                dbuser=user_to_transfer,
+                db=db,
+                admin=sudo_admin,
+            )
+        assert exc.value.status_code == 403
+        assert "limit reached" in exc.value.detail.lower()
+
+    def test_set_owner_succeeds_within_users_limit(self, db, make_admin, make_user, make_settings):
+        from app.routers.user import set_owner
+        from app.db.models import Proxy
+
+        sudo_admin = make_admin("sudo_admin2", is_sudo=True)
+        reseller = make_admin("reseller2", is_sudo=False)
+        make_settings(reseller, users_limit=5)
+
+        make_user(reseller, username="r2_u1")
+        user_to_transfer = make_user(sudo_admin, username="transfer_me2")
+        proxy = Proxy(type="vless", settings={"id": "35e4e39c-7d5c-4f4b-8b71-558e4f37ff53", "flow": ""}, user_id=user_to_transfer.id)
+        db.add(proxy)
+        db.commit()
+        db.refresh(user_to_transfer)
+
+        from unittest.mock import patch
+        with patch("app.models.user.create_subscription_token", return_value="fake_token"):
+            updated_user = set_owner(
+                admin_username="reseller2",
+                dbuser=user_to_transfer,
+                db=db,
+                admin=sudo_admin,
+            )
+        assert updated_user.admin.username == "reseller2"
+
+
+class TestUserInboundsFiltering:
+
+    def test_add_user_auto_filters_omitted_inbounds(self, db, make_admin, make_settings):
+        from unittest.mock import MagicMock, patch
+        from fastapi import BackgroundTasks
+        from app.models.user import UserCreate
+        from app.routers.user import add_user
+        from app import xray
+
+        reseller = make_admin("reseller_inb", is_sudo=False)
+        make_settings(reseller, allowed_inbounds=["VLESS_TCP"])
+
+        # Mock xray inbounds
+        orig_by_proto = xray.config.inbounds_by_protocol
+        orig_by_tag = xray.config.inbounds_by_tag
+        try:
+            xray.config.inbounds_by_protocol = {
+                "vless": [{"tag": "VLESS_TCP"}, {"tag": "VLESS_WS"}]
+            }
+            xray.config.inbounds_by_tag = {
+                "VLESS_TCP": {"tag": "VLESS_TCP", "network": "tcp", "sni": []},
+                "VLESS_WS": {"tag": "VLESS_WS", "network": "ws", "sni": []}
+            }
+
+            # Create user without explicit inbounds
+            new_u = UserCreate(username="auto_inb_user", proxies={"vless": {}})
+            assert "inbounds" not in new_u.model_fields_set
+
+            bg = BackgroundTasks()
+            with patch("app.models.user.create_subscription_token", return_value="fake_token"):
+                user_res = add_user(new_user=new_u, bg=bg, db=db, admin=reseller)
+
+            # Check that only allowed inbounds were assigned to the user
+            assert user_res.inbounds["vless"] == ["VLESS_TCP"]
+        finally:
+            xray.config.inbounds_by_protocol = orig_by_proto
+            xray.config.inbounds_by_tag = orig_by_tag
+
+    def test_add_user_explicit_forbidden_inbound_raises_403(self, db, make_admin, make_settings):
+        from unittest.mock import patch
+        from fastapi import BackgroundTasks, HTTPException
+        from app.models.user import UserCreate
+        from app.routers.user import add_user
+        from app import xray
+
+        reseller = make_admin("reseller_forbid", is_sudo=False)
+        make_settings(reseller, allowed_inbounds=["VLESS_TCP"])
+
+        orig_by_proto = xray.config.inbounds_by_protocol
+        orig_by_tag = xray.config.inbounds_by_tag
+        try:
+            xray.config.inbounds_by_protocol = {
+                "vless": [{"tag": "VLESS_TCP"}, {"tag": "VLESS_WS"}]
+            }
+            xray.config.inbounds_by_tag = {
+                "VLESS_TCP": {"tag": "VLESS_TCP"},
+                "VLESS_WS": {"tag": "VLESS_WS"}
+            }
+
+            # Explicitly request forbidden inbound
+            new_u = UserCreate(
+                username="forbid_inb_user",
+                proxies={"vless": {}},
+                inbounds={"vless": ["VLESS_WS"]}
+            )
+            assert "inbounds" in new_u.model_fields_set
+
+            bg = BackgroundTasks()
+            with patch("app.models.user.create_subscription_token", return_value="fake_token"):
+                with pytest.raises(HTTPException) as exc:
+                    add_user(new_user=new_u, bg=bg, db=db, admin=reseller)
+            assert exc.value.status_code == 403
+            assert "not permitted" in exc.value.detail.lower()
+        finally:
+            xray.config.inbounds_by_protocol = orig_by_proto
+            xray.config.inbounds_by_tag = orig_by_tag
+
+    def test_add_user_protocol_with_zero_allowed_inbounds_raises_403(self, db, make_admin, make_settings):
+        from unittest.mock import patch
+        from fastapi import BackgroundTasks, HTTPException
+        from app.models.user import UserCreate
+        from app.routers.user import add_user
+        from app import xray
+
+        reseller = make_admin("reseller_no_proto", is_sudo=False)
+        make_settings(reseller, allowed_inbounds=["VLESS_TCP"])
+
+        orig_by_proto = xray.config.inbounds_by_protocol
+        orig_by_tag = xray.config.inbounds_by_tag
+        try:
+            xray.config.inbounds_by_protocol = {
+                "vless": [{"tag": "VLESS_TCP"}],
+                "vmess": [{"tag": "VMESS_TCP"}]
+            }
+            xray.config.inbounds_by_tag = {
+                "VLESS_TCP": {"tag": "VLESS_TCP"},
+                "VMESS_TCP": {"tag": "VMESS_TCP"}
+            }
+
+            # Reseller only has VLESS_TCP, tries to enable vmess without inbounds
+            new_u = UserCreate(username="vmess_no_perm", proxies={"vmess": {}})
+            bg = BackgroundTasks()
+            with patch("app.models.user.create_subscription_token", return_value="fake_token"):
+                with pytest.raises(HTTPException) as exc:
+                    add_user(new_user=new_u, bg=bg, db=db, admin=reseller)
+            assert exc.value.status_code == 403
+            assert "no permitted inbounds" in exc.value.detail.lower()
+        finally:
+            xray.config.inbounds_by_protocol = orig_by_proto
+            xray.config.inbounds_by_tag = orig_by_tag

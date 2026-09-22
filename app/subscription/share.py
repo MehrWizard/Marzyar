@@ -261,11 +261,11 @@ def process_inbounds_and_tags(
             if not inbound:
                 continue
 
-            format_variables.update({"TRANSPORT": inbound["network"]})
+            format_variables.update({"TRANSPORT": inbound.get("network", "tcp")})
             host_inbound = inbound.copy()
             for host in xray.hosts.get(tag, []):
                 sni = ""
-                sni_list = host["sni"] or inbound["sni"]
+                sni_list = host.get("sni") or inbound.get("sni", [])
                 if sni_list:
                     salt = secrets.token_hex(8)
                     sni = random.choice(sni_list).replace("*", salt)

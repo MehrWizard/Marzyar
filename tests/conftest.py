@@ -78,7 +78,7 @@ import types as _types
 _app_mod = _types.ModuleType("app")
 _app_mod.__path__ = [os.path.join(os.path.dirname(__file__), "..", "app")]
 _app_mod.__package__ = "app"
-_app_mod.__version__ = "0.1.26"
+_app_mod.__version__ = "0.1.27"
 _app_mod.logger = logging.getLogger("test")
 _app_mod.scheduler = MagicMock()
 
@@ -91,6 +91,7 @@ _xray_config.inbounds_by_protocol = {}
 _xray_mod.config = _xray_config
 _xray_mod.api = MagicMock()
 _xray_mod.nodes = {}
+_xray_mod.hosts = {}
 _app_mod.xray = _xray_mod
 
 sys.modules["app"] = _app_mod
@@ -193,14 +194,16 @@ def make_user(db):
     """Factory to create User rows."""
     _counter = [0]
     def _make(admin, username=None, status=UserStatus.active,
-              used_traffic=0, data_limit=None, expire=None):
+              used_traffic=0, data_limit=None, expire=None, **kwargs):
         _counter[0] += 1
+        created_at = kwargs.pop("created_at", datetime.now(timezone.utc).replace(tzinfo=None))
         user = User(
             username=username or f"user_{_counter[0]}",
             status=status, used_traffic=used_traffic,
             data_limit=data_limit, expire=expire,
-            admin_id=admin.id, created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            admin_id=admin.id, created_at=created_at,
             data_limit_reset_strategy=UserDataLimitResetStrategy.no_reset,
+            **kwargs
         )
         db.add(user)
         db.flush()

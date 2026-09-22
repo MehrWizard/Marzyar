@@ -123,7 +123,9 @@ class User(Base):
 
     @property
     def last_traffic_reset_time(self):
-        return self.usage_logs[-1].reset_at if self.usage_logs else self.created_at
+        if not self.usage_logs:
+            return self.created_at
+        return max((log.reset_at for log in self.usage_logs if log.reset_at), default=self.created_at)
 
     @property
     def excluded_inbounds(self):
@@ -138,7 +140,12 @@ class User(Base):
         for proxy in self.proxies:
             _[proxy.type] = []
             excluded_tags = [i.tag for i in proxy.excluded_inbounds]
-            for inbound in xray.config.inbounds_by_protocol.get(proxy.type, []):
+            proto_key = proxy.type.value if hasattr(proxy.type, 'value') else str(proxy.type)
+            inbounds_for_proto = (
+                xray.config.inbounds_by_protocol.get(proto_key)
+                or xray.config.inbounds_by_protocol.get(proxy.type, [])
+            )
+            for inbound in inbounds_for_proto:
                 if inbound["tag"] not in excluded_tags:
                     _[proxy.type].append(inbound["tag"])
 

@@ -54,6 +54,24 @@ def add_user(
                 detail=f"Protocol {proxy_type} is disabled on your server",
             )
 
+    # Marzyar: if admin has allowed_inbounds configured and inbounds were not explicitly specified,
+    # auto-filter inbounds so user only gets inbounds permitted for this admin account
+    if not admin.is_sudo:
+        from app.marzyar import crud as marzyar_crud
+        admin_id = marzyar_crud.get_admin_id(db, admin)
+        if admin_id:
+            settings = marzyar_crud.get_admin_settings(db, admin_id)
+            if settings and settings.allowed_inbounds:
+                allowed_set = set(settings.allowed_inbounds)
+                if "inbounds" not in getattr(new_user, "model_fields_set", set()):
+                    for proto in list(new_user.inbounds.keys()):
+                        new_user.inbounds[proto] = [t for t in new_user.inbounds[proto] if t in allowed_set]
+                        if not new_user.inbounds[proto]:
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"No permitted inbounds available for protocol '{proto}' under your account."
+                            )
+
     # Marzyar: validate admin user limits, quota, and allowed inbounds
     from app.marzyar.quota import check_admin_can_create_user
     check_admin_can_create_user(
@@ -466,6 +484,19 @@ def set_owner(
     if not new_admin:
         raise HTTPException(status_code=404, detail="Admin not found")
 
+    if not new_admin.is_sudo and dbuser.admin_id != new_admin.id:
+        from app.marzyar import crud as marzyar_crud
+        admin_id = marzyar_crud.get_admin_id(db, new_admin)
+        if admin_id:
+            settings = marzyar_crud.get_admin_settings(db, admin_id)
+            if settings and settings.users_limit is not None:
+                current_count = marzyar_crud.get_admin_user_count(db, admin_id, for_update=True)
+                if current_count >= settings.users_limit:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Target admin user limit reached ({current_count}/{settings.users_limit}). Cannot transfer user."
+                    )
+
     dbuser = crud.set_owner(db, dbuser, new_admin)
 
     try:
@@ -482,7 +513,7 @@ def set_owner(
     else:
         xray.operations.remove_user(dbuser)
 
-    logger.info(f'{user.username}"owner successfully set to{admin.username}')
+    logger.info(f'User "{user.username}" owner successfully set to "{new_admin.username}"')
 
     return user
 
