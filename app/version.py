@@ -2,7 +2,7 @@ import os
 import subprocess
 
 
-def get_version(fallback: str = "0.1.16") -> str:
+def get_version(fallback: str = "0.1.17") -> str:
     """
     Resolve the real live version of the application dynamically.
 
