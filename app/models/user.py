@@ -282,7 +282,7 @@ class UserModify(User):
 class UserResponse(User):
     username: str
     status: UserStatus
-    used_traffic: int
+    used_traffic: int = 0
     lifetime_used_traffic: int = 0
     created_at: datetime
     links: List[str] = []
@@ -319,8 +319,8 @@ class UserResponse(User):
 
     @field_validator("used_traffic", "lifetime_used_traffic", mode='before')
     def cast_to_int(cls, v):
-        if v is None:  # Allow None values
-            return v
+        if v is None:  # Allow None values by defaulting to 0
+            return 0
         if isinstance(v, float):  # Allow float to int conversion
             return int(v)
         if isinstance(v, int):  # Allow integers directly
@@ -350,8 +350,8 @@ class UserUsageResponse(BaseModel):
 
     @field_validator("used_traffic",  mode='before')
     def cast_to_int(cls, v):
-        if v is None:  # Allow None values
-            return v
+        if v is None:  # Allow None values by defaulting to 0
+            return 0
         if isinstance(v, float):  # Allow float to int conversion
             return int(v)
         if isinstance(v, int):  # Allow integers directly

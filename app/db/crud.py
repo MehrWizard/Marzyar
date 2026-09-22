@@ -563,7 +563,7 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
     if modify.data_limit is not None:
         dbuser.data_limit = (modify.data_limit or None)
         if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
-            if not dbuser.data_limit or dbuser.used_traffic < dbuser.data_limit:
+            if not dbuser.data_limit or (dbuser.used_traffic or 0) < dbuser.data_limit:
                 if dbuser.status != UserStatus.on_hold:
                     dbuser.status = UserStatus.active
 
@@ -598,12 +598,12 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
         if lock:
             now_ts = time.time()
             if lock.original_status == UserStatus.limited.value:
-                if modify.data_limit is not None and (not dbuser.data_limit or dbuser.used_traffic < dbuser.data_limit):
+                if modify.data_limit is not None and (not dbuser.data_limit or (dbuser.used_traffic or 0) < dbuser.data_limit):
                     if not dbuser.expire or dbuser.expire > now_ts:
                         lock.original_status = UserStatus.active.value
             elif lock.original_status == UserStatus.expired.value:
                 if modify.expire is not None and (not dbuser.expire or dbuser.expire > now_ts):
-                    if dbuser.data_limit and dbuser.used_traffic >= dbuser.data_limit:
+                    if dbuser.data_limit and (dbuser.used_traffic or 0) >= dbuser.data_limit:
                         lock.original_status = UserStatus.limited.value
                     else:
                         lock.original_status = UserStatus.active.value
@@ -658,7 +658,7 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
     """
     usage_log = UserUsageResetLogs(
         user=dbuser,
-        used_traffic_at_reset=dbuser.used_traffic,
+        used_traffic_at_reset=(dbuser.used_traffic or 0),
     )
     db.add(usage_log)
 
@@ -730,7 +730,7 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
 
     usage_log = UserUsageResetLogs(
         user=dbuser,
-        used_traffic_at_reset=dbuser.used_traffic,
+        used_traffic_at_reset=(dbuser.used_traffic or 0),
     )
     db.add(usage_log)
 

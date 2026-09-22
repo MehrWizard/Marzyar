@@ -722,18 +722,19 @@ def genqr_command(call: types.CallbackQuery):
         else:
             data_limit = readable_size(user.data_limit) if user.data_limit else "Unlimited"
             used_traffic = readable_size(user.used_traffic) if user.used_traffic else "-"
-            data_left = readable_size(user.data_limit - user.used_traffic) if user.data_limit else "-"
+            data_left = readable_size(user.data_limit - (user.used_traffic or 0)) if user.data_limit else "-"
             on_hold_timeout = user.on_hold_timeout.strftime("%Y-%m-%d") if user.on_hold_timeout else "-"
-            on_hold_duration = user.on_hold_expire_duration // (24 * 60 * 60) if user.on_hold_expire_duration else None
+            on_hold_duration = f"{user.on_hold_expire_duration // (24 * 60 * 60)} days" if user.on_hold_expire_duration else "-"
             expiry_date = datetime.fromtimestamp(user.expire).date() if user.expire else "Never"
             time_left = time_to_string(datetime.fromtimestamp(user.expire)) if user.expire else "-"
             if user.status == UserStatus.on_hold:
-                expiry_text = f"⏰ <b>On Hold Duration:</b> <code>{on_hold_duration} days</code> (auto start at <code>{
-                    on_hold_timeout}</code>)"
+                expiry_text = f"⏰ <b>On Hold Duration:</b> <code>{on_hold_duration}</code> (auto start at <code>{on_hold_timeout}</code>)"
             else:
                 expiry_text = f"📅 <b>Expiry Date:</b> <code>{expiry_date}</code> ({time_left})"
+            status_icon = statuses.get(user.status, "❓")
+            status_str = user.status.value if hasattr(user.status, "value") else str(user.status)
             text = f"""\
-{statuses[user.status]} <b>Status:</b> <code>{user.status.title()}</code>
+{status_icon} <b>Status:</b> <code>{status_str.replace('_', ' ').title()}</code>
 
 🔤 <b>Username:</b> <code>{user.username}</code>
 
@@ -793,7 +794,7 @@ def template_charge_command(call: types.CallbackQuery):
             expire = (datetime.fromtimestamp(db_user.expire) if db_user.expire else today)
             expire += relativedelta(seconds=template.expire_duration)
             db_user.expire = expire.timestamp()
-            db_user.data_limit = (max(0, user.data_limit - user.used_traffic) + template.data_limit
+            db_user.data_limit = (max(0, user.data_limit - (user.used_traffic or 0)) + template.data_limit
                                   ) if user.data_limit else template.data_limit
             db_user.status = UserStatus.active
             bot.edit_message_text(
@@ -804,7 +805,7 @@ def template_charge_command(call: types.CallbackQuery):
                 call.message.chat.id, call.message.message_id, parse_mode='html',
                 reply_markup=BotKeyboard.charge_add_or_reset(
                     username=username, template_id=template_id))
-        elif (not user.data_limit and not user.expire) or (user.data_limit and user.used_traffic > user.data_limit) or (user.expire and now > datetime.fromtimestamp(user.expire)):
+        elif (not user.data_limit and not user.expire) or (user.data_limit and (user.used_traffic or 0) > user.data_limit) or (user.expire and now > datetime.fromtimestamp(user.expire)):
             crud.reset_user_data_usage(db, db_user)
             expire_date = None
             if template.expire_duration:
@@ -849,7 +850,7 @@ def template_charge_command(call: types.CallbackQuery):
             expire = (datetime.fromtimestamp(db_user.expire) if db_user.expire else today)
             expire += relativedelta(seconds=template.expire_duration)
             db_user.expire = expire.timestamp()
-            db_user.data_limit = (max(0, user.data_limit - user.used_traffic) + template.data_limit
+            db_user.data_limit = (max(0, user.data_limit - (user.used_traffic or 0)) + template.data_limit
                                   ) if user.data_limit else template.data_limit
             db_user.status = UserStatus.active
             bot.edit_message_text(
@@ -1642,7 +1643,7 @@ def confirm_user_command(call: types.CallbackQuery):
                 modify = UserModify(
                     status=UserStatus.active,
                     expire=int(expire_date.timestamp()) if expire_date else 0,
-                    data_limit=max(0, (user.data_limit or 0) - user.used_traffic) + template.data_limit,
+                    data_limit=max(0, (user.data_limit or 0) - (user.used_traffic or 0)) + template.data_limit,
                 )
             db_user = crud.update_user(db, db_user, modify)
             xray.operations.add_user(db_user)

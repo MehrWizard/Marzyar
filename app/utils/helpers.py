@@ -6,7 +6,7 @@ from uuid import UUID
 def calculate_usage_percent(used_traffic: int, data_limit: int) -> float:
     if not data_limit or data_limit <= 0:
         return 0.0
-    return (used_traffic * 100) / data_limit
+    return ((used_traffic or 0) * 100) / data_limit
 
 
 def calculate_expiration_days(expire: int) -> int:

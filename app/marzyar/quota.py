@@ -180,7 +180,7 @@ def check_admin_can_modify_user(
                 or (
                     target_user.status == UserStatus.limited
                     and new_data_limit is not None
-                    and (new_data_limit == 0 or target_user.used_traffic < new_data_limit)
+                    and (new_data_limit == 0 or (target_user.used_traffic or 0) < new_data_limit)
                     and new_status not in [UserStatus.disabled, UserStatus.expired]
                 )
                 or (

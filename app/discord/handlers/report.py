@@ -28,24 +28,29 @@ def send_webhook(json_data, webhook):
 
 
 def report_status_change(username: str, status: str, admin: Admin = None):
+    status_val = status.value if hasattr(status, 'value') else str(status)
     _status = {
         'active': '**:white_check_mark: Activated**',
         'disabled': '**:x: Disabled**',
         'limited': '**:low_battery: #Limited**',
-        'expired': '**:clock5: #Expired**'
+        'expired': '**:clock5: #Expired**',
+        'on_hold': '**:electric_plug: #OnHold**',
     }
     _status_color = {
         'active': int("9ae6b4", 16),
         'disabled': int("424b59", 16),
         'limited': int("f8a7a8", 16),
-        'expired': int("fbd38d", 16)
+        'expired': int("fbd38d", 16),
+        'on_hold': int("63b3ed", 16),
     }
+    status_title = status_val.replace('_', ' ').title()
+    status_desc = _status.get(status_val, f"**#{status_title}**")
     statusChange = {
         "content": "",
         "embeds": [
             {
-                "description": f"{_status[status]}\n----------------------\n**Username:** {username}",
-                "color": _status_color[status],
+                "description": f"{status_desc}\n----------------------\n**Username:** {username}",
+                "color": _status_color.get(status_val, int("424b59", 16)),
                 "footer": {
                     "text": f"Belongs To: {admin.username if admin else None}"
                 },

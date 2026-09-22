@@ -27,10 +27,15 @@ def usage_command(message):
             'active': '✅',
             'expired': '🕰',
             'limited': '📵',
-            'disabled': '❌'}
+            'disabled': '❌',
+            'on_hold': '🔌',
+        }
+        status_val = user.status.value if hasattr(user.status, 'value') else str(user.status)
+        status_icon = statuses.get(status_val, '❓')
+        status_title = status_val.replace('_', ' ').title()
 
         text = f'''\
-┌─{statuses[user.status]} <b>Status:</b> <code>{user.status.title()}</code>
+┌─{status_icon} <b>Status:</b> <code>{status_title}</code>
 │          └─<b>Username:</b> <code>{user.username}</code>
 │
 ├─🔋 <b>Data limit:</b> <code>{readable_size(user.data_limit) if user.data_limit else 'Unlimited'}</code>

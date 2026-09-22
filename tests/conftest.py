@@ -52,13 +52,17 @@ for _mod_name in [
     "xray_api.proto.common.serial", "xray_api.proto.common.net",
     "xray_api.types",
     # Telegram bot
-    "telebot", "telebot.types", "telebot.custom_filters", "telebot.apihelper",
+    "telebot", "telebot.types", "telebot.custom_filters", "telebot.apihelper", "telebot.formatting",
     # APScheduler
     "apscheduler", "apscheduler.schedulers", "apscheduler.schedulers.background",
     # Other optional deps
     "commentjson", "jdatetime", "psutil",
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())
+
+_telebot_formatting = MagicMock()
+_telebot_formatting.escape_html = lambda text: str(text) if text else ""
+sys.modules["telebot.formatting"] = _telebot_formatting
 
 # Override xray_api.types.account with our enum-bearing module
 sys.modules["xray_api.types.account"] = _xray_account
@@ -74,7 +78,7 @@ import types as _types
 _app_mod = _types.ModuleType("app")
 _app_mod.__path__ = [os.path.join(os.path.dirname(__file__), "..", "app")]
 _app_mod.__package__ = "app"
-_app_mod.__version__ = "0.1.25"
+_app_mod.__version__ = "0.1.26"
 _app_mod.logger = logging.getLogger("test")
 _app_mod.scheduler = MagicMock()
 
@@ -102,9 +106,20 @@ _routers_mod.__package__ = "app.routers"
 _routers_mod.api_router = MagicMock()
 sys.modules["app.routers"] = _routers_mod
 
+_telegram_mod = _types.ModuleType("app.telegram")
+_telegram_mod.__path__ = [os.path.join(_app_mod.__path__[0], "telegram")]
+_telegram_mod.__package__ = "app.telegram"
+_telegram_mod.bot = MagicMock()
+sys.modules["app.telegram"] = _telegram_mod
+
+_jobs_mod = _types.ModuleType("app.jobs")
+_jobs_mod.__path__ = [os.path.join(_app_mod.__path__[0], "jobs")]
+_jobs_mod.__package__ = "app.jobs"
+sys.modules["app.jobs"] = _jobs_mod
+
 # Stub heavy subpackages that app.db.crud imports transitively
 for _mod_name in [
-    "app.dashboard", "app.jobs", "app.telegram",
+    "app.dashboard",
     "app.routers.api_router", "app.utils.report",
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())

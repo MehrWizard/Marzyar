@@ -4,8 +4,12 @@ from datetime import datetime
 from operator import attrgetter
 from typing import Union
 
-from pymysql.err import OperationalError
-from sqlalchemy import and_, bindparam, insert, select, update
+try:
+    from pymysql.err import OperationalError as PyMySQLOperationalError
+except ImportError:
+    PyMySQLOperationalError = None
+from sqlalchemy import and_, bindparam, func, insert, select, update
+from sqlalchemy.exc import OperationalError as SAOperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.dml import Insert
 
@@ -22,6 +26,10 @@ from xray_api import exc as xray_exc
 
 
 def safe_execute(db: Session, stmt, params=None):
+    catches = (SAOperationalError,)
+    if PyMySQLOperationalError is not None:
+        catches = (SAOperationalError, PyMySQLOperationalError)
+
     if db.bind.name == 'mysql':
         if isinstance(stmt, Insert):
             stmt = stmt.prefix_with('IGNORE')
@@ -33,16 +41,29 @@ def safe_execute(db: Session, stmt, params=None):
                 db.connection().execute(stmt, params)
                 db.commit()
                 done = True
-            except OperationalError as err:
-                if err.args[0] == 1213 and tries < 3:  # Deadlock
+            except catches as err:
+                orig = getattr(err, 'orig', err)
+                err_code = getattr(orig, 'args', [None])[0] if getattr(orig, 'args', None) else None
+                if err_code in (1213, 1205) and tries < 3:  # Deadlock or Lock Wait Timeout
                     db.rollback()
                     tries += 1
                     continue
                 raise err
 
     else:
-        db.connection().execute(stmt, params)
-        db.commit()
+        tries = 0
+        done = False
+        while not done:
+            try:
+                db.connection().execute(stmt, params)
+                db.commit()
+                done = True
+            except catches as err:
+                if 'database is locked' in str(err).lower() and tries < 3:
+                    db.rollback()
+                    tries += 1
+                    continue
+                raise err
 
 
 def record_user_stats(params: list, node_id: Union[int, None],
@@ -163,7 +184,7 @@ def record_user_usages():
         stmt = update(User). \
             where(User.id == bindparam('uid')). \
             values(
-                used_traffic=User.used_traffic + bindparam('value'),
+                used_traffic=func.coalesce(User.used_traffic, 0) + bindparam('value'),
                 online_at=datetime.utcnow()
         )
 
@@ -173,7 +194,7 @@ def record_user_usages():
         if admin_data:
             admin_update_stmt = update(Admin). \
                 where(Admin.id == bindparam('admin_id')). \
-                values(users_usage=Admin.users_usage + bindparam('value'))
+                values(users_usage=func.coalesce(Admin.users_usage, 0) + bindparam('value'))
             safe_execute(db, admin_update_stmt, admin_data)
 
     if DISABLE_RECORDING_NODE_USAGE:

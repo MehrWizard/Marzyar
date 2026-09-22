@@ -618,5 +618,95 @@ class TestHardeningAndEdgeCases:
         assert u.sub_last_user_agent == "ClashForWindows/0.20"
         assert u.sub_updated_at is not None
 
+    def test_lifetime_used_traffic_null_used_traffic(self, db, make_admin, make_user):
+        admin = make_admin()
+        u = make_user(admin)
+        u.used_traffic = None
+        db.commit()
+        assert u.lifetime_used_traffic == 0
+        assert u.reseted_usage == 0
+
+    def test_calculate_usage_percent_null_safety(self):
+        from app.utils.helpers import calculate_usage_percent
+        assert calculate_usage_percent(None, 1000) == 0.0
+        assert calculate_usage_percent(500, 0) == 0.0
+        assert calculate_usage_percent(500, None) == 0.0
+        assert calculate_usage_percent(500, 1000) == 50.0
+
+    def test_report_status_change_on_hold(self, make_admin):
+        from unittest.mock import patch, MagicMock
+        from app.models.user import UserStatus
+        import app.telegram.handlers.report as tg_report
+        import app.discord.handlers.report as dc_report
+
+        admin = make_admin()
+        with patch.object(tg_report, "report") as mock_tg:
+            tg_report.report_status_change("test_user", UserStatus.on_hold, admin)
+            assert mock_tg.called
+            assert "#OnHold" in mock_tg.call_args[1]["text"]
+
+        with patch.object(dc_report, "send_webhooks") as mock_dc:
+            dc_report.report_status_change("test_user", "on_hold", admin)
+            assert mock_dc.called
+            payload = mock_dc.call_args[1]["json_data"]
+            assert "#OnHold" in payload["embeds"][0]["description"]
+
+    def test_get_user_info_text_on_hold_and_null_used_traffic(self, db, make_admin, make_user):
+        from app.models.user import UserStatus
+        from app.telegram.utils.shared import get_user_info_text
+        from app.db.models import Proxy
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.on_hold, data_limit=1000)
+        proxy = Proxy(type="vless", settings={"id": "35e4e39c-7d5c-4f4b-8b71-558e4f37ff53", "flow": ""}, user_id=u.id)
+        db.add(proxy)
+        u.used_traffic = None
+        u.on_hold_expire_duration = None
+        db.commit()
+        db.refresh(u)
+
+        from unittest.mock import patch
+        with patch("app.models.user.create_subscription_token", return_value="fake_token"):
+            info_text = get_user_info_text(u)
+        assert "On Hold" in info_text
+        assert "🔌" in info_text
+        assert "1000.0 B" in info_text
+        assert "left" in info_text
+
+    def test_unlock_users_null_used_traffic(self, db, make_admin, make_user):
+        from app.marzyar.crud import lock_users, unlock_users
+        admin = make_admin()
+        u = make_user(admin, data_limit=5000)
+        u.used_traffic = None
+        db.commit()
+
+        lock_users(db, [(u.id, "active")], admin.id)
+        restored = unlock_users(db, [u.id])
+        assert len(restored) == 1
+        db.refresh(u)
+        assert u.status == "active"
+
+    def test_safe_execute_deadlock_and_lock_wait(self, db):
+        from unittest.mock import MagicMock
+        from sqlalchemy.exc import OperationalError as SAOperationalError
+        from app.jobs.record_usages import safe_execute
+
+        mock_db = MagicMock()
+        mock_conn = MagicMock()
+        mock_db.connection.return_value = mock_conn
+        mock_db.bind.name = 'mysql'
+
+        class FakeOrig:
+            args = (1213, "Deadlock found when trying to get lock; try restarting transaction")
+
+        deadlock_err = SAOperationalError("UPDATE ...", {}, FakeOrig())
+
+        # First two calls raise deadlock, third succeeds
+        mock_conn.execute.side_effect = [deadlock_err, deadlock_err, True]
+        safe_execute(mock_db, "FAKE_STMT")
+        assert mock_conn.execute.call_count == 3
+        assert mock_db.rollback.call_count == 2
+        assert mock_db.commit.call_count == 1
+
+
 
 

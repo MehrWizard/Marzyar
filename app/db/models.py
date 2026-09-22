@@ -104,7 +104,7 @@ class User(Base):
 
     @hybrid_property
     def reseted_usage(self) -> int:
-        return int(sum([log.used_traffic_at_reset for log in self.usage_logs]))
+        return int(sum([(log.used_traffic_at_reset or 0) for log in self.usage_logs]))
 
     @reseted_usage.expression
     def reseted_usage(cls):
@@ -117,8 +117,8 @@ class User(Base):
     @property
     def lifetime_used_traffic(self) -> int:
         return int(
-            sum([log.used_traffic_at_reset for log in self.usage_logs])
-            + self.used_traffic
+            sum([(log.used_traffic_at_reset or 0) for log in self.usage_logs])
+            + (self.used_traffic or 0)
         )
 
     @property

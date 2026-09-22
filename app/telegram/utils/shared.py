@@ -50,20 +50,21 @@ def get_user_info_text(db_user: User) -> str:
     user: UserResponse = UserResponse.model_validate(db_user)
     data_limit = readable_size(user.data_limit) if user.data_limit else "Unlimited"
     used_traffic = readable_size(user.used_traffic) if user.used_traffic else "-"
-    data_left = readable_size(user.data_limit - user.used_traffic) if user.data_limit else "-"
+    data_left = readable_size(user.data_limit - (user.used_traffic or 0)) if user.data_limit else "-"
     on_hold_timeout = user.on_hold_timeout.strftime("%Y-%m-%d") if user.on_hold_timeout else "-"
-    on_hold_duration = user.on_hold_expire_duration // (24*60*60) if user.on_hold_expire_duration else None
+    on_hold_duration = f"{user.on_hold_expire_duration // (24*60*60)} days" if user.on_hold_expire_duration else "-"
     expiry_date = dt.fromtimestamp(user.expire).date() if user.expire else "Never"
     time_left = time_to_string(dt.fromtimestamp(user.expire)) if user.expire else "-"
     online_at = time_to_string(user.online_at) if user.online_at else "-"
     sub_updated_at = time_to_string(user.sub_updated_at) if user.sub_updated_at else "-"
     if user.status == UserStatus.on_hold:
-        expiry_text = f"⏰ <b>On Hold Duration:</b> <code>{on_hold_duration} days</code> (auto start at <code>{
-            on_hold_timeout}</code>)"
+        expiry_text = f"⏰ <b>On Hold Duration:</b> <code>{on_hold_duration}</code> (auto start at <code>{on_hold_timeout}</code>)"
     else:
         expiry_text = f"📅 <b>Expiry Date:</b> <code>{expiry_date}</code> ({time_left})"
+    status_icon = statuses.get(user.status, "❓")
+    status_str = user.status.value if hasattr(user.status, "value") else str(user.status)
     return f"""\
-{statuses[user.status]} <b>Status:</b> <code>{user.status.title()}</code>
+{status_icon} <b>Status:</b> <code>{status_str.replace('_', ' ').title()}</code>
 
 🔤 <b>Username:</b> <code>{user.username}</code>
 

@@ -127,12 +127,15 @@ def report_user_deletion(username: str, by: str, admin: Admin = None):
 
 
 def report_status_change(username: str, status: str, admin: Admin = None):
+    status_val = status.value if hasattr(status, 'value') else str(status)
     _status = {
         'active': '✅ <b>#Activated</b>',
         'disabled': '❌ <b>#Disabled</b>',
         'limited': '🪫 <b>#Limited</b>',
-        'expired': '🕔 <b>#Expired</b>'
+        'expired': '🕔 <b>#Expired</b>',
+        'on_hold': '🔌 <b>#OnHold</b>',
     }
+    status_text = _status.get(status_val, f"<b>#{status_val.replace('_', ' ').title()}</b>")
     text = '''\
 {status}
 ➖➖➖➖➖➖➖➖➖
@@ -141,7 +144,7 @@ def report_status_change(username: str, status: str, admin: Admin = None):
     '''.format(
         belong_to=escape_html(admin.username) if admin else None,
         username=escape_html(username),
-        status=_status[status]
+        status=status_text
     )
     return report(chat_id=admin.telegram_id if admin and admin.telegram_id else None, text=text)
 
