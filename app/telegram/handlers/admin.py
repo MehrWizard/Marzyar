@@ -804,7 +804,7 @@ def template_charge_command(call: types.CallbackQuery):
                 call.message.chat.id, call.message.message_id, parse_mode='html',
                 reply_markup=BotKeyboard.charge_add_or_reset(
                     username=username, template_id=template_id))
-        elif (not user.data_limit and not user.expire) or (user.used_traffic > user.data_limit) or (now > datetime.fromtimestamp(user.expire)):
+        elif (not user.data_limit and not user.expire) or (user.used_traffic > user.data_limit) or (user.expire and now > datetime.fromtimestamp(user.expire)):
             crud.reset_user_data_usage(db, db_user)
             expire_date = None
             if template.expire_duration:

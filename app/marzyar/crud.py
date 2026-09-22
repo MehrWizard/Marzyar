@@ -134,11 +134,11 @@ def get_locked_user_ids_for_admin(db: Session, admin_id: int) -> Set[int]:
     return {r[0] for r in rows}
 
 
-def get_locked_users(db: Session) -> List[Tuple[MarzyarUserLock, User, Admin]]:
+def get_locked_users(db: Session) -> List[Tuple[MarzyarUserLock, Optional[User], Optional[Admin]]]:
     return (
         db.query(MarzyarUserLock, User, Admin)
-        .join(User, MarzyarUserLock.user_id == User.id)
-        .join(Admin, MarzyarUserLock.admin_id == Admin.id)
+        .outerjoin(User, MarzyarUserLock.user_id == User.id)
+        .outerjoin(Admin, MarzyarUserLock.admin_id == Admin.id)
         .all()
     )
 
@@ -241,7 +241,7 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
             restored.append((dbuser, lock.original_status))
         db.delete(lock)
 
-    if restored:
+    if locks:
         try:
             db.commit()
         except Exception as e:

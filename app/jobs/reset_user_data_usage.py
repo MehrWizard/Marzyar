@@ -45,18 +45,26 @@ def reset_user_data_usage():
             from app.marzyar.crud import get_locked_users
             for lock, user, admin in get_locked_users(db):
                 try:
+                    if not user:
+                        from app.marzyar.models import MarzyarUserLock
+                        db.query(MarzyarUserLock).filter(MarzyarUserLock.user_id == lock.user_id).delete(synchronize_session=False)
+                        db.commit()
+                        continue
                     # Skip locked users whose original status was expired or disabled
                     if lock.original_status in ('expired', 'disabled'):
                         continue
                     strategy_val = user.data_limit_reset_strategy.value if hasattr(user.data_limit_reset_strategy, 'value') else user.data_limit_reset_strategy
                     if strategy_val and strategy_val in reset_strategy_to_days:
                         last_reset_time = user.last_traffic_reset_time
+                        if not last_reset_time:
+                            continue
                         num_days_to_reset = reset_strategy_to_days[strategy_val]
                         if (now - last_reset_time).days >= num_days_to_reset:
                             crud.reset_user_data_usage(db, user)
                             logger.info(f"Locked user data usage reset for User \"{user.username}\"")
                 except Exception as e:
-                    logger.error(f"[Marzyar] Error resetting locked user \"{user.username}\": {e}")
+                    user_name = user.username if user else f"ID {lock.user_id}"
+                    logger.error(f"[Marzyar] Error resetting locked user \"{user_name}\": {e}")
         except Exception as e:
             logger.error(f"[Marzyar] Error during locked users periodic data reset: {e}")
 

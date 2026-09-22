@@ -202,15 +202,16 @@ def get_locked_users_list(
     records = crud.get_locked_users(db)
     admin_id = crud.get_admin_id(db, current_admin)
     if not current_admin.is_sudo and admin_id:
-        records = [r for r in records if r[2].id == admin_id]
+        records = [r for r in records if r[2] and r[2].id == admin_id]
 
     return [
         MarzyarLockedUserResponse(
             user_id=lock.user_id,
             username=user.username,
-            admin_username=admin.username,
+            admin_username=admin.username if admin else "system",
             locked_at=lock.locked_at,
             lock_reason=lock.lock_reason,
         )
         for lock, user, admin in records
+        if user
     ]

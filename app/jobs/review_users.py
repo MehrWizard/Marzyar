@@ -46,8 +46,10 @@ def add_notification_reminders(db: Session, user: "User", now: datetime = dateti
 
 def reset_user_by_next_report(db: Session, user: "User"):
     user = reset_user_by_next(db, user)
+    if not user:
+        return
 
-    if user.status in [UserStatus.active, UserStatus.on_hold]:
+    if user.status in [UserStatus.active, UserStatus.on_hold] and not user.is_locked:
         xray.operations.update_user(user)
     else:
         xray.operations.remove_user(user)

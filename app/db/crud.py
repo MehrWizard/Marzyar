@@ -740,16 +740,6 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
             pass
 
     dbuser.node_usages.clear()
-    try:
-        from app.marzyar.models import MarzyarUserLock
-        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
-        if lock:
-            lock.original_status = UserStatus.active.value
-            dbuser.status = UserStatus.disabled
-        else:
-            dbuser.status = UserStatus.active
-    except Exception:
-        dbuser.status = UserStatus.active
 
     remaining_traffic = (
         max(0, (dbuser.data_limit or 0) - (dbuser.used_traffic or 0))
@@ -775,6 +765,26 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
         dbuser.data_limit += remaining_traffic
 
     dbuser.used_traffic = 0
+
+    now_ts = time.time()
+    is_expired = bool(dbuser.expire and dbuser.expire <= now_ts)
+    try:
+        from app.marzyar.models import MarzyarUserLock
+        lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
+        if lock:
+            if is_expired:
+                lock.original_status = UserStatus.expired.value
+            else:
+                lock.original_status = UserStatus.active.value
+            dbuser.status = UserStatus.disabled
+        else:
+            if is_expired:
+                dbuser.status = UserStatus.expired
+            else:
+                dbuser.status = UserStatus.active
+    except Exception:
+        dbuser.status = UserStatus.expired if is_expired else UserStatus.active
+
     db.delete(dbuser.next_plan)
     dbuser.next_plan = None
     db.add(dbuser)
@@ -1114,8 +1124,9 @@ def set_owner(db: Session, dbuser: User, admin: Admin) -> User:
         if is_user_locked(db, dbuser.id):
             unlock_and_restore_users(db, [dbuser.id])
 
-        if old_admin_id and old_admin_id != admin.id and used_traffic > 0:
-            increment_admin_quota_counter(db, old_admin_id, used_traffic)
+        if old_admin_id != admin.id and used_traffic > 0:
+            if old_admin_id:
+                increment_admin_quota_counter(db, old_admin_id, used_traffic)
             increment_admin_quota_counter(db, admin.id, -used_traffic)
     except Exception:
         pass

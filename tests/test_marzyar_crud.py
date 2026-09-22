@@ -269,6 +269,15 @@ class TestUserUnlocking:
         db.refresh(u)
         assert u.status == UserStatus.limited
 
+    def test_unlock_orphaned_lock_commits_cleanly(self, db, make_admin, make_user, make_lock):
+        admin = make_admin()
+        u = make_user(admin)
+        make_lock(u, admin)
+
+        # Unlocking the locked user's id deletes and commits the lock record
+        crud.unlock_users(db, [u.id])
+        assert db.query(MarzyarUserLock).filter_by(user_id=u.id).first() is None
+
 
 # ======================================================================
 # Locked User ID Queries
@@ -300,6 +309,28 @@ class TestLockedUserQueries:
         ids1 = crud.get_locked_user_ids_for_admin(db, admin1.id)
         assert u1.id in ids1
         assert u2.id not in ids1
+
+    def test_get_locked_users_outerjoin(self, db, make_admin, make_user, make_lock):
+        admin = make_admin()
+        u1 = make_user(admin, username="u1")
+        make_lock(u1, admin)
+
+        records = crud.get_locked_users(db)
+        assert len(records) == 1
+        lock, user, rec_admin = records[0]
+        assert user.id == u1.id
+        assert rec_admin.id == admin.id
+
+        # Verify outerjoin null safety when a record has None for user or admin
+        from unittest.mock import MagicMock
+        mock_db = MagicMock()
+        mock_db.query.return_value.outerjoin.return_value.outerjoin.return_value.all.return_value = [
+            (lock, None, None)
+        ]
+        mock_records = crud.get_locked_users(mock_db)
+        assert len(mock_records) == 1
+        assert mock_records[0][1] is None
+        assert mock_records[0][2] is None
 
 
 # ======================================================================
@@ -376,3 +407,42 @@ class TestTimezoneAndExpirationInvariance:
 
         assert u1.status == UserStatus.expired
         assert u2.status == UserStatus.active
+
+    def test_reset_user_by_next_evaluates_expired_plan(self, db, make_admin, make_user):
+        import time
+        from app.db.crud import reset_user_by_next
+        from app.db.models import NextPlan
+
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.limited, data_limit=100, used_traffic=100)
+        past_expire = int(time.time()) - 1000
+        np = NextPlan(user_id=u.id, expire=past_expire, data_limit=500)
+        u.next_plan = np
+        db.commit()
+
+        reset_user_by_next(db, u)
+        db.refresh(u)
+
+        assert u.status == UserStatus.expired
+        assert u.expire == past_expire
+        assert u.used_traffic == 0
+
+    def test_set_owner_when_old_admin_is_none(self, db, make_admin, make_user):
+        from app.db.crud import set_owner
+
+        temp_admin = make_admin("temp_admin")
+        new_admin = make_admin("new_reseller")
+        u = make_user(temp_admin, username="unowned_user", used_traffic=5000)
+        u.admin = None
+        u.admin_id = None
+        db.commit()
+
+        set_owner(db, u, new_admin)
+        db.refresh(u)
+        assert u.admin_id == new_admin.id
+
+        # New admin's quota_used_traffic should be -5000 so their consumed usage remains 0
+        settings = crud.get_admin_settings(db, new_admin.id)
+        assert settings is not None
+        assert settings.quota_used_traffic == -5000
+        assert crud.get_admin_total_consumed_traffic(db, new_admin.id, settings) == 0

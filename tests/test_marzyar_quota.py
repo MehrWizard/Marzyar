@@ -337,3 +337,37 @@ class TestAuditAdminQuotas:
         assert exc.value.status_code == 403
         assert "allocated" in exc.value.detail.lower()
         assert "exceed your limit" in exc.value.detail.lower()
+
+    def test_get_locked_users_list_router_scoping_and_null_safety(self, db, make_admin, make_user, make_lock):
+        from app.marzyar.router import get_locked_users_list
+        from app.models.admin import Admin as PydanticAdmin
+
+        admin1 = make_admin("admin1")
+        admin2 = make_admin("admin2")
+        u1 = make_user(admin1, username="u1")
+        u2 = make_user(admin2, username="u2")
+        make_lock(u1, admin1)
+        make_lock(u2, admin2)
+
+        p_sudo = PydanticAdmin(id=admin1.id, username="admin1", is_sudo=True)
+        p_reseller = PydanticAdmin(id=admin2.id, username="admin2", is_sudo=False)
+
+        # Sudo sees all locked users
+        sudo_list = get_locked_users_list(db=db, current_admin=p_sudo)
+        assert len(sudo_list) == 2
+        assert {r.username for r in sudo_list} == {"u1", "u2"}
+
+        # Reseller sees only their own locked user
+        reseller_list = get_locked_users_list(db=db, current_admin=p_reseller)
+        assert len(reseller_list) == 1
+        assert reseller_list[0].username == "u2"
+        assert reseller_list[0].admin_username == "admin2"
+
+        # Verify null safety when mock records contain orphaned tuples
+        from unittest.mock import MagicMock, patch
+        mock_lock = MagicMock(user_id=777, locked_at=datetime.utcnow(), lock_reason="test")
+        mock_user = MagicMock(username="u_orphan")
+        with patch("app.marzyar.crud.get_locked_users", return_value=[(mock_lock, mock_user, None)]):
+            null_admin_res = get_locked_users_list(db=db, current_admin=p_sudo)
+            assert len(null_admin_res) == 1
+            assert null_admin_res[0].admin_username == "system"
