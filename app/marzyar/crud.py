@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from typing import List, Optional, Set, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -192,7 +193,7 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
     )
 
     restored = []
-    now_ts = datetime.utcnow().timestamp()
+    now_ts = time.time()
 
     for lock in locks:
         dbuser = db.query(User).filter(User.id == lock.user_id).first()

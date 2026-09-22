@@ -1,5 +1,6 @@
 from datetime import datetime
 import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -163,7 +164,7 @@ def check_admin_can_modify_user(
         old_limit = target_user.data_limit or 0
         delta = (new_data_limit - old_limit) if new_data_limit is not None else 0
 
-        now_ts = datetime.utcnow().timestamp()
+        now_ts = time.time()
         is_activating = (
             target_user.status not in [UserStatus.active, UserStatus.on_hold]
             and (

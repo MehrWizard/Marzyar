@@ -4,6 +4,7 @@ Functions for managing proxy hosts, users, user templates, nodes, and administra
 
 from collections import defaultdict
 from datetime import datetime, timedelta
+import time
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -595,7 +596,7 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
         from app.marzyar.models import MarzyarUserLock
         lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
         if lock:
-            now_ts = datetime.utcnow().timestamp()
+            now_ts = time.time()
             if lock.original_status == UserStatus.limited.value:
                 if modify.data_limit is not None and (not dbuser.data_limit or dbuser.used_traffic < dbuser.data_limit):
                     if not dbuser.expire or dbuser.expire > now_ts:
