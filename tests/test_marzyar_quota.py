@@ -4,7 +4,7 @@ Tests for Marzyar quota enforcement:
   - check_admin_can_modify_user
   - audit_admin_quotas (lock/unlock lifecycle)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -365,7 +365,7 @@ class TestAuditAdminQuotas:
 
         # Verify null safety when mock records contain orphaned tuples
         from unittest.mock import MagicMock, patch
-        mock_lock = MagicMock(user_id=777, locked_at=datetime.utcnow(), lock_reason="test")
+        mock_lock = MagicMock(user_id=777, locked_at=datetime.now(timezone.utc).replace(tzinfo=None), lock_reason="test")
         mock_user = MagicMock(username="u_orphan")
         with patch("app.marzyar.crud.get_locked_users", return_value=[(mock_lock, mock_user, None)]):
             null_admin_res = get_locked_users_list(db=db, current_admin=p_sudo)

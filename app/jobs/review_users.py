@@ -1,6 +1,6 @@
 from datetime import datetime
 import time
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,9 @@ if TYPE_CHECKING:
     from app.db.models import User
 
 
-def add_notification_reminders(db: Session, user: "User", now: datetime = datetime.utcnow()) -> None:
+def add_notification_reminders(db: Session, user: "User", now: Optional[datetime] = None) -> None:
+    if now is None:
+        now = datetime.utcnow()
     if user.data_limit:
         usage_percent = calculate_usage_percent(user.used_traffic, user.data_limit)
 

@@ -623,7 +623,9 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
     if modify.on_hold_expire_duration is not None:
         dbuser.on_hold_expire_duration = modify.on_hold_expire_duration
 
-    fields_set = getattr(modify, "model_fields_set", getattr(modify, "__fields_set__", set()))
+    fields_set = getattr(modify, "model_fields_set", None)
+    if fields_set is None:
+        fields_set = getattr(modify, "__fields_set__", set())
     if "next_plan" in fields_set:
         if modify.next_plan is not None:
             dbuser.next_plan = NextPlan(
@@ -840,7 +842,7 @@ def update_user_sub(db: Session, dbuser: User, user_agent: str) -> User:
         User: The updated user object.
     """
     dbuser.sub_updated_at = datetime.utcnow()
-    dbuser.sub_last_user_agent = user_agent
+    dbuser.sub_last_user_agent = user_agent[:512] if user_agent else None
 
     db.commit()
     db.refresh(dbuser)
@@ -975,6 +977,12 @@ def activate_all_disabled_users(db: Session, admin: Optional[Admin] = None):
 
     db.commit()
 
+    try:
+        from app.marzyar.quota import audit_admin_quotas
+        audit_admin_quotas(db)
+    except Exception:
+        pass
+
 
 def autodelete_expired_users(db: Session,
                              include_limited_users: bool = False) -> List[User]:
@@ -1007,7 +1015,7 @@ def autodelete_expired_users(db: Session,
     expired_users = [
         user
         for (user, auto_delete) in query
-        if user.last_status_change + timedelta(days=auto_delete) <= datetime.utcnow()
+        if (user.last_status_change or user.created_at or datetime.utcnow()) + timedelta(days=auto_delete) <= datetime.utcnow()
     ]
 
     if expired_users:

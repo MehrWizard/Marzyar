@@ -141,18 +141,18 @@ class FormatVariables(dict):
 class ProxyHost(BaseModel):
     remark: str
     address: str
-    port: Optional[int] = Field(None, nullable=True)
-    sni: Optional[str] = Field(None, nullable=True)
-    host: Optional[str] = Field(None, nullable=True)
-    path: Optional[str] = Field(None, nullable=True)
+    port: Optional[int] = Field(default=None)
+    sni: Optional[str] = Field(default=None)
+    host: Optional[str] = Field(default=None)
+    path: Optional[str] = Field(default=None)
     security: ProxyHostSecurity = ProxyHostSecurity.inbound_default
     alpn: ProxyHostALPN = ProxyHostALPN.none
     fingerprint: ProxyHostFingerprint = ProxyHostFingerprint.none
     allowinsecure: Union[bool, None] = None
     is_disabled: Union[bool, None] = None
     mux_enable: Union[bool, None] = None
-    fragment_setting: Optional[str] = Field(None, nullable=True)
-    noise_setting: Optional[str] = Field(None, nullable=True)
+    fragment_setting: Optional[str] = Field(default=None)
+    noise_setting: Optional[str] = Field(default=None)
     random_user_agent: Union[bool, None] = None
     use_sni_as_host: Union[bool, None] = None
     model_config = ConfigDict(from_attributes=True)

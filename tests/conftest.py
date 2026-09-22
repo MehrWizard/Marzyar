@@ -7,7 +7,7 @@ no external dependencies (no running Marzban/Xray instance).
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum as _Enum
 from unittest.mock import MagicMock
 
@@ -74,6 +74,7 @@ import types as _types
 _app_mod = _types.ModuleType("app")
 _app_mod.__path__ = [os.path.join(os.path.dirname(__file__), "..", "app")]
 _app_mod.__package__ = "app"
+_app_mod.__version__ = "0.1.24"
 _app_mod.logger = logging.getLogger("test")
 _app_mod.scheduler = MagicMock()
 
@@ -93,9 +94,15 @@ sys.modules["app.xray"] = _xray_mod
 sys.modules["app.xray.config"] = _xray_config
 sys.modules["app.xray.operations"] = MagicMock()
 
+_routers_mod = _types.ModuleType("app.routers")
+_routers_mod.__path__ = [os.path.join(_app_mod.__path__[0], "routers")]
+_routers_mod.__package__ = "app.routers"
+_routers_mod.api_router = MagicMock()
+sys.modules["app.routers"] = _routers_mod
+
 # Stub heavy subpackages that app.db.crud imports transitively
 for _mod_name in [
-    "app.dashboard", "app.jobs", "app.routers", "app.telegram",
+    "app.dashboard", "app.jobs", "app.telegram",
     "app.routers.api_router", "app.utils.report",
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())
@@ -155,7 +162,7 @@ def make_admin(db):
             username=username or f"admin_{_counter[0]}",
             hashed_password="fakehash",
             is_sudo=is_sudo,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
         db.add(admin)
         db.flush()
@@ -174,7 +181,7 @@ def make_user(db):
             username=username or f"user_{_counter[0]}",
             status=status, used_traffic=used_traffic,
             data_limit=data_limit, expire=expire,
-            admin_id=admin.id, created_at=datetime.utcnow(),
+            admin_id=admin.id, created_at=datetime.now(timezone.utc).replace(tzinfo=None),
             data_limit_reset_strategy=UserDataLimitResetStrategy.no_reset,
         )
         db.add(user)
@@ -205,7 +212,7 @@ def make_lock(db):
     def _make(user, admin, original_status="active", reason="admin_quota_exceeded"):
         lock = MarzyarUserLock(
             user_id=user.id, admin_id=admin.id,
-            locked_at=datetime.utcnow(), lock_reason=reason,
+            locked_at=datetime.now(timezone.utc).replace(tzinfo=None), lock_reason=reason,
             original_status=original_status,
         )
         db.add(lock)

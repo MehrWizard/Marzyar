@@ -7,7 +7,7 @@ from app.models.proxy import ProxyTypes
 
 
 class UserTemplate(BaseModel):
-    name: Optional[str] = Field(None, nullable=True)
+    name: Optional[str] = Field(default=None)
     data_limit: Optional[int] = Field(
         ge=0, default=None, description="data_limit can be 0 or greater"
     )

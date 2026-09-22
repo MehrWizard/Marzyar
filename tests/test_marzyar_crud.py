@@ -500,3 +500,71 @@ class TestTimezoneAndExpirationInvariance:
         from app.marzyar.quota import audit_admin_quotas
         # Ensure audit runs smoothly even with no settings
         audit_admin_quotas(db)
+
+
+class TestHardeningAndEdgeCases:
+    def test_calculate_usage_percent(self):
+        from app.utils.helpers import calculate_usage_percent
+        assert calculate_usage_percent(100, 0) == 0.0
+        assert calculate_usage_percent(100, None) == 0.0
+        assert calculate_usage_percent(100, -10) == 0.0
+        assert calculate_usage_percent(50, 100) == 50.0
+
+    def test_calculate_expiration_days(self):
+        import time
+        from app.utils.helpers import calculate_expiration_days
+        assert calculate_expiration_days(None) == 0
+        assert calculate_expiration_days(0) == 0
+        future = int(time.time()) + 86400 * 5 + 3600
+        days = calculate_expiration_days(future)
+        assert days in (5, 6)
+
+    def test_update_user_sub_truncates_long_user_agent(self, db, make_admin, make_user):
+        from app.db.crud import update_user_sub
+        admin = make_admin()
+        u = make_user(admin)
+        long_ua = "A" * 700
+        updated = update_user_sub(db, u, long_ua)
+        assert len(updated.sub_last_user_agent) == 512
+        assert updated.sub_last_user_agent == "A" * 512
+
+        updated_none = update_user_sub(db, u, None)
+        assert updated_none.sub_last_user_agent is None
+
+    def test_unlock_users_updates_last_status_change(self, db, make_admin, make_user):
+        from datetime import datetime, timezone, timedelta
+        from app.marzyar.crud import lock_users, unlock_users
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.active)
+        lock_users(db, [(u.id, UserStatus.active.value)], admin.id)
+        u.last_status_change = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10)
+        db.commit()
+
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
+        unlock_users(db, [u.id])
+        db.refresh(u)
+        assert u.last_status_change is not None
+        assert u.last_status_change >= before - timedelta(seconds=2)
+
+    def test_get_system_stats_null_system(self, db, make_admin):
+        from unittest.mock import patch
+        from app.routers.system import get_system_stats
+        admin = make_admin(is_sudo=True)
+        with patch("app.db.crud.get_system_usage", return_value=None):
+            stats = get_system_stats(admin=admin, db=db)
+            assert stats.incoming_bandwidth == 0
+            assert stats.outgoing_bandwidth == 0
+
+    def test_autodelete_expired_users_null_last_status_change(self, db, make_admin, make_user):
+        from app.db.crud import autodelete_expired_users
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.expired)
+        u.last_status_change = None
+        u.auto_delete_in_days = 0
+        db.commit()
+
+        # Should delete user cleanly without raising TypeError
+        deleted = autodelete_expired_users(db)
+        assert any(x.id == u.id for x in deleted)
+
+

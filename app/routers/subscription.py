@@ -1,5 +1,12 @@
 import re
-from distutils.version import LooseVersion
+try:
+    from packaging.version import Version as LooseVersion
+except ImportError:
+    try:
+        from distutils.version import LooseVersion
+    except ImportError:
+        def LooseVersion(v):
+            return [int(x) if x.isdigit() else x for x in re.split(r'(\d+)', str(v))]
 
 from fastapi import APIRouter, Depends, Header, Path, Request, Response
 from fastapi.responses import HTMLResponse

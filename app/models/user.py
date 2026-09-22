@@ -58,7 +58,7 @@ class NextPlanModel(BaseModel):
 
 class User(BaseModel):
     proxies: Dict[ProxyTypes, ProxySettings] = {}
-    expire: Optional[int] = Field(None, nullable=True)
+    expire: Optional[int] = Field(default=None)
     data_limit: Optional[int] = Field(
         ge=0, default=None, description="data_limit can be 0 or greater"
     )
@@ -66,16 +66,16 @@ class User(BaseModel):
         UserDataLimitResetStrategy.no_reset
     )
     inbounds: Dict[ProxyTypes, List[str]] = {}
-    note: Optional[str] = Field(None, nullable=True)
-    sub_updated_at: Optional[datetime] = Field(None, nullable=True)
-    sub_last_user_agent: Optional[str] = Field(None, nullable=True)
-    online_at: Optional[datetime] = Field(None, nullable=True)
-    on_hold_expire_duration: Optional[int] = Field(None, nullable=True)
-    on_hold_timeout: Optional[Union[datetime, None]] = Field(None, nullable=True)
+    note: Optional[str] = Field(default=None)
+    sub_updated_at: Optional[datetime] = Field(default=None)
+    sub_last_user_agent: Optional[str] = Field(default=None)
+    online_at: Optional[datetime] = Field(default=None)
+    on_hold_expire_duration: Optional[int] = Field(default=None)
+    on_hold_timeout: Optional[Union[datetime, None]] = Field(default=None)
 
-    auto_delete_in_days: Optional[int] = Field(None, nullable=True)
+    auto_delete_in_days: Optional[int] = Field(default=None)
 
-    next_plan: Optional[NextPlanModel] = Field(None, nullable=True)
+    next_plan: Optional[NextPlanModel] = Field(default=None)
 
     @field_validator('data_limit', mode='before')
     def cast_to_int(cls, v):

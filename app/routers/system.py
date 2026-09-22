@@ -60,8 +60,8 @@ def get_system_stats(
             incoming_bandwidth = 0
             outgoing_bandwidth = dbadmin.users_usage
     else:
-        incoming_bandwidth = system.uplink
-        outgoing_bandwidth = system.downlink
+        incoming_bandwidth = system.uplink if system else 0
+        outgoing_bandwidth = system.downlink if system else 0
 
     return SystemStats(
         version=__version__,

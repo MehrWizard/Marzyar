@@ -238,6 +238,7 @@ def unlock_users(db: Session, user_ids: List[int]) -> List[Tuple[User, str]]:
 
             dbuser.status = target_status
             dbuser.marzyar_lock = None
+            dbuser.last_status_change = datetime.utcnow()
             restored.append((dbuser, lock.original_status))
         db.delete(lock)
 
