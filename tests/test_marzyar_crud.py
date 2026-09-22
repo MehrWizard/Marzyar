@@ -446,3 +446,57 @@ class TestTimezoneAndExpirationInvariance:
         assert settings is not None
         assert settings.quota_used_traffic == -5000
         assert crud.get_admin_total_consumed_traffic(db, new_admin.id, settings) == 0
+
+    def test_start_user_expire_null_duration_safety(self, db, make_admin, make_user):
+        from app.db.crud import start_user_expire
+
+        admin = make_admin()
+        u = make_user(admin, username="onhold_null_duration", status=UserStatus.on_hold)
+        u.on_hold_expire_duration = None
+        db.commit()
+
+        # Should not raise TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'
+        result = start_user_expire(db, u)
+        assert result.expire is None
+        assert result.on_hold_expire_duration is None
+
+    def test_reset_admin_usage_synchronizes_quota_and_unlocks(self, db, make_admin, make_user, make_settings):
+        from app.db.crud import reset_admin_usage
+        from app.marzyar.crud import lock_users, is_user_locked
+
+        admin = make_admin()
+        make_settings(admin, traffic_limit=1000)
+        u = make_user(admin, status=UserStatus.active, used_traffic=2000)
+        lock_users(db, [(u.id, UserStatus.active.value)], admin.id)
+        assert is_user_locked(db, u.id) is True
+
+        admin.users_usage = 2000
+        db.commit()
+
+        reset_admin_usage(db, admin)
+        db.refresh(admin)
+
+        assert admin.users_usage == 0
+        settings = crud.get_admin_settings(db, admin.id)
+        assert settings.quota_used_traffic == -2000
+        assert crud.get_admin_total_consumed_traffic(db, admin.id, settings) == 0
+        assert is_user_locked(db, u.id) is False
+
+    def test_remove_admin_cleans_up_locks(self, db, make_admin, make_user, make_settings):
+        from app.db.crud import remove_admin
+        from app.marzyar.crud import lock_users, is_user_locked
+
+        admin = make_admin()
+        make_settings(admin, traffic_limit=1000)
+        u = make_user(admin, status=UserStatus.active, used_traffic=2000)
+        lock_users(db, [(u.id, UserStatus.active.value)], admin.id)
+        assert is_user_locked(db, u.id) is True
+
+        remove_admin(db, admin)
+        assert is_user_locked(db, u.id) is False
+        assert crud.get_admin_settings(db, admin.id) is None
+
+    def test_audit_admin_quotas_empty_settings(self, db):
+        from app.marzyar.quota import audit_admin_quotas
+        # Ensure audit runs smoothly even with no settings
+        audit_admin_quotas(db)

@@ -793,7 +793,7 @@ def template_charge_command(call: types.CallbackQuery):
             expire = (datetime.fromtimestamp(db_user.expire) if db_user.expire else today)
             expire += relativedelta(seconds=template.expire_duration)
             db_user.expire = expire.timestamp()
-            db_user.data_limit = (user.data_limit - user.used_traffic + template.data_limit
+            db_user.data_limit = (max(0, user.data_limit - user.used_traffic) + template.data_limit
                                   ) if user.data_limit else template.data_limit
             db_user.status = UserStatus.active
             bot.edit_message_text(
@@ -804,7 +804,7 @@ def template_charge_command(call: types.CallbackQuery):
                 call.message.chat.id, call.message.message_id, parse_mode='html',
                 reply_markup=BotKeyboard.charge_add_or_reset(
                     username=username, template_id=template_id))
-        elif (not user.data_limit and not user.expire) or (user.used_traffic > user.data_limit) or (user.expire and now > datetime.fromtimestamp(user.expire)):
+        elif (not user.data_limit and not user.expire) or (user.data_limit and user.used_traffic > user.data_limit) or (user.expire and now > datetime.fromtimestamp(user.expire)):
             crud.reset_user_data_usage(db, db_user)
             expire_date = None
             if template.expire_duration:
@@ -849,7 +849,7 @@ def template_charge_command(call: types.CallbackQuery):
             expire = (datetime.fromtimestamp(db_user.expire) if db_user.expire else today)
             expire += relativedelta(seconds=template.expire_duration)
             db_user.expire = expire.timestamp()
-            db_user.data_limit = (user.data_limit - user.used_traffic + template.data_limit
+            db_user.data_limit = (max(0, user.data_limit - user.used_traffic) + template.data_limit
                                   ) if user.data_limit else template.data_limit
             db_user.status = UserStatus.active
             bot.edit_message_text(
@@ -1642,7 +1642,7 @@ def confirm_user_command(call: types.CallbackQuery):
                 modify = UserModify(
                     status=UserStatus.active,
                     expire=int(expire_date.timestamp()) if expire_date else 0,
-                    data_limit=(user.data_limit or 0) - user.used_traffic + template.data_limit,
+                    data_limit=max(0, (user.data_limit or 0) - user.used_traffic) + template.data_limit,
                 )
             db_user = crud.update_user(db, db_user, modify)
             xray.operations.add_user(db_user)

@@ -1177,8 +1177,9 @@ def start_user_expire(db: Session, dbuser: User) -> User:
     Returns:
         User: The updated user object.
     """
-    expire = int(time.time()) + dbuser.on_hold_expire_duration
-    dbuser.expire = expire
+    if dbuser.on_hold_expire_duration:
+        expire = int(time.time()) + dbuser.on_hold_expire_duration
+        dbuser.expire = expire
     dbuser.on_hold_expire_duration = None
     dbuser.on_hold_timeout = None
     db.commit()
@@ -1354,6 +1355,11 @@ def remove_admin(db: Session, dbadmin: Admin) -> Admin:
 
     db.delete(dbadmin)
     db.commit()
+    try:
+        from app.marzyar.quota import audit_admin_quotas
+        audit_admin_quotas(db)
+    except Exception:
+        pass
     return dbadmin
 
 
@@ -1438,18 +1444,23 @@ def reset_admin_usage(db: Session, dbadmin: Admin) -> int:
     Returns:
         Admin: The updated admin.
     """
-    if (dbadmin.users_usage == 0):
-        return dbadmin
+    if dbadmin.users_usage != 0:
+        usage_log = AdminUsageLogs(
+            admin=dbadmin,
+            used_traffic_at_reset=dbadmin.users_usage
+        )
+        db.add(usage_log)
+        dbadmin.users_usage = 0
+        db.commit()
+        db.refresh(dbadmin)
 
-    usage_log = AdminUsageLogs(
-        admin=dbadmin,
-        used_traffic_at_reset=dbadmin.users_usage
-    )
-    db.add(usage_log)
-    dbadmin.users_usage = 0
+    try:
+        from app.marzyar import crud as marzyar_crud, quota as marzyar_quota
+        marzyar_crud.reset_admin_quota_counter(db, dbadmin.id)
+        marzyar_quota.audit_admin_quotas(db)
+    except Exception:
+        pass
 
-    db.commit()
-    db.refresh(dbadmin)
     return dbadmin
 
 

@@ -301,11 +301,14 @@ def audit_admin_quotas(db: Session) -> None:
         # Clean up any orphaned locks where admin was deleted or no longer in settings
         try:
             active_settings_admin_ids = {s.admin_id for s in all_settings}
-            orphaned_locks = (
-                db.query(MarzyarUserLock.user_id)
-                .filter(~MarzyarUserLock.admin_id.in_(active_settings_admin_ids))
-                .all()
-            )
+            if active_settings_admin_ids:
+                orphaned_locks = (
+                    db.query(MarzyarUserLock.user_id)
+                    .filter(~MarzyarUserLock.admin_id.in_(active_settings_admin_ids))
+                    .all()
+                )
+            else:
+                orphaned_locks = db.query(MarzyarUserLock.user_id).all()
             if orphaned_locks:
                 orphaned_ids = [r[0] for r in orphaned_locks]
                 unlock_and_restore_users(db, orphaned_ids)
