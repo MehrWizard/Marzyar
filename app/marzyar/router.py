@@ -137,11 +137,15 @@ def get_my_limits(
     current_admin: Admin = Depends(Admin.get_current),
 ):
     """Retrieve the current admin's own limits, remaining quota, and allowed inbounds."""
-    s = crud.get_or_create_admin_settings(db, current_admin.id)
-    u_count = crud.get_admin_user_count(db, current_admin.id)
-    allocated = crud.get_admin_allocated_traffic(db, current_admin.id)
-    consumed = crud.get_admin_total_consumed_traffic(db, current_admin.id, s)
-    locked_count = len(crud.get_locked_user_ids_for_admin(db, current_admin.id))
+    admin_id = crud.get_admin_id(db, current_admin)
+    if not admin_id:
+        raise HTTPException(status_code=404, detail="Admin not found")
+
+    s = crud.get_or_create_admin_settings(db, admin_id)
+    u_count = crud.get_admin_user_count(db, admin_id)
+    allocated = crud.get_admin_allocated_traffic(db, admin_id)
+    consumed = crud.get_admin_total_consumed_traffic(db, admin_id, s)
+    locked_count = len(crud.get_locked_user_ids_for_admin(db, admin_id))
 
     is_user_limit_exceeded = bool(s.users_limit is not None and u_count >= s.users_limit)
     is_quota_exceeded = False
@@ -180,8 +184,9 @@ def get_locked_users_list(
 ):
     """List currently locked users with reasons."""
     records = crud.get_locked_users(db)
-    if not current_admin.is_sudo:
-        records = [r for r in records if r[2].id == current_admin.id]
+    admin_id = crud.get_admin_id(db, current_admin)
+    if not current_admin.is_sudo and admin_id:
+        records = [r for r in records if r[2].id == admin_id]
 
     return [
         MarzyarLockedUserResponse(

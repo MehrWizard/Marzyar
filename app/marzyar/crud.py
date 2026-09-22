@@ -1,6 +1,6 @@
 from datetime import datetime
 import time
-from typing import List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,21 @@ def init_marzyar_db() -> None:
         logger.info("[Marzyar] Database tables verified and initialized safely.")
     except Exception as e:
         logger.error(f"[Marzyar] Failed to initialize Marzyar database tables: {e}")
+
+
+def get_admin_id(db: Session, admin: Any) -> Optional[int]:
+    """Safely extract admin ID whether admin is an ORM model, Pydantic model, or int."""
+    if isinstance(admin, int):
+        return admin
+    admin_id = getattr(admin, "id", None)
+    if admin_id is not None:
+        return admin_id
+    username = getattr(admin, "username", None)
+    if username:
+        dbadmin = db.query(Admin).filter(Admin.username == username).first()
+        if dbadmin:
+            return dbadmin.id
+    return None
 
 
 def get_admin_settings(db: Session, admin_id: int) -> Optional[MarzyarAdminSettings]:

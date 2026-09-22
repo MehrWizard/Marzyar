@@ -44,6 +44,25 @@ def get_system_stats(
     )
     realtime_bandwidth_stats = realtime_bandwidth()
 
+    users_limit = None
+    traffic_limit = None
+    if not admin.is_sudo and dbadmin:
+        try:
+            from app.marzyar import crud as marzyar_crud
+            admin_settings = marzyar_crud.get_admin_settings(db, dbadmin.id)
+            if admin_settings:
+                users_limit = admin_settings.users_limit
+                traffic_limit = admin_settings.traffic_limit
+            consumed = marzyar_crud.get_admin_total_consumed_traffic(db, dbadmin.id, admin_settings)
+            incoming_bandwidth = 0
+            outgoing_bandwidth = consumed
+        except Exception:
+            incoming_bandwidth = 0
+            outgoing_bandwidth = dbadmin.users_usage
+    else:
+        incoming_bandwidth = system.uplink
+        outgoing_bandwidth = system.downlink
+
     return SystemStats(
         version=__version__,
         mem_total=mem.total,
@@ -57,10 +76,12 @@ def get_system_stats(
         users_expired=users_expired,
         users_limited=users_limited,
         users_on_hold=users_on_hold,
-        incoming_bandwidth=system.uplink,
-        outgoing_bandwidth=system.downlink,
+        incoming_bandwidth=incoming_bandwidth,
+        outgoing_bandwidth=outgoing_bandwidth,
         incoming_bandwidth_speed=realtime_bandwidth_stats.incoming_bytes,
         outgoing_bandwidth_speed=realtime_bandwidth_stats.outgoing_bytes,
+        users_limit=users_limit,
+        traffic_limit=traffic_limit,
     )
 
 
@@ -76,15 +97,17 @@ def get_inbounds(
 
     try:
         from app.marzyar import crud as marzyar_crud
-        settings = marzyar_crud.get_admin_settings(db, admin.id)
-        if settings and settings.allowed_inbounds:
-            allowed = set(settings.allowed_inbounds)
-            filtered = {}
-            for proto, inb_list in inbounds.items():
-                matching = [i for i in inb_list if i.get("tag") in allowed]
-                if matching:
-                    filtered[proto] = matching
-            return filtered
+        admin_id = marzyar_crud.get_admin_id(db, admin)
+        if admin_id:
+            settings = marzyar_crud.get_admin_settings(db, admin_id)
+            if settings and settings.allowed_inbounds:
+                allowed = set(settings.allowed_inbounds)
+                filtered = {}
+                for proto, inb_list in inbounds.items():
+                    matching = [i for i in inb_list if i.get("tag") in allowed]
+                    if matching:
+                        filtered[proto] = matching
+                return filtered
     except Exception:
         pass
 

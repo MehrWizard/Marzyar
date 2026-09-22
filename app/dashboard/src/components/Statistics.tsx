@@ -24,6 +24,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useAdminsQuery } from "contexts/AdminsContext";
 import { useDashboard } from "contexts/DashboardContext";
+import { useMarzyarMyLimitsQuery } from "contexts/MarzyarContext";
+import useGetUser from "hooks/useGetUser";
 import { FC, PropsWithChildren, ReactElement, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
@@ -258,6 +260,12 @@ export const Statistics: FC<BoxProps> = (props) => {
   });
   const { t } = useTranslation();
 
+  const { userData, getUserIsSuccess, getUserIsPending } = useGetUser();
+  const isSudoAdmin = !getUserIsPending && getUserIsSuccess ? userData.is_sudo : false;
+  const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudoAdmin);
+  const effectiveUsersLimit =
+    !isSudoAdmin && (myLimits?.users_limit ?? systemData?.users_limit ?? null);
+
   return (
     <SimpleGrid
       columns={{ base: 2, lg: 4 }}
@@ -447,13 +455,50 @@ export const Statistics: FC<BoxProps> = (props) => {
                 color="gray.500"
                 _dark={{ color: "gray.400" }}
               >
-                / {numberWithCommas(systemData.total_user)}
+                / {numberWithCommas(
+                  effectiveUsersLimit !== null && effectiveUsersLimit !== undefined
+                    ? effectiveUsersLimit
+                    : systemData.total_user
+                )}
               </Text>
             </HStack>
           )
         }
         subContent={
-          systemData && (
+          effectiveUsersLimit !== null ? (
+            <HStack
+              spacing={1.5}
+              alignItems="center"
+              color={
+                systemData && systemData.users_active >= effectiveUsersLimit
+                  ? "red.500"
+                  : "blue.500"
+              }
+              _dark={{
+                color:
+                  systemData && systemData.users_active >= effectiveUsersLimit
+                    ? "red.400"
+                    : "blue.400",
+              }}
+            >
+              <Box
+                w="2"
+                h="2"
+                rounded="full"
+                bg={
+                  systemData && systemData.users_active >= effectiveUsersLimit
+                    ? "red.500"
+                    : "blue.500"
+                }
+              />
+              <Text fontSize="xs" fontWeight="medium">
+                {systemData
+                  ? Math.max(0, effectiveUsersLimit - systemData.users_active)
+                  : 0}{" "}
+                {t("marzyar.slotsAvailable", "slots available")}
+              </Text>
+            </HStack>
+          ) : systemData && (
             <HStack
               spacing={1.5}
               alignItems="center"
@@ -589,38 +634,94 @@ export const Statistics: FC<BoxProps> = (props) => {
       <StatisticCard
         title={t("dataUsage")}
         content={
-          systemData &&
-          formatBytes(
-            systemData.incoming_bandwidth + systemData.outgoing_bandwidth
+          !isSudoAdmin && myLimits && myLimits.traffic_limit !== null ? (
+            <HStack alignItems="flex-end" spacing={1}>
+              <Text>
+                {formatBytes(
+                  myLimits.oversell_allowed
+                    ? myLimits.current_consumed_traffic
+                    : myLimits.current_allocated_traffic
+                )}
+              </Text>
+              <Text
+                fontWeight="normal"
+                fontSize={{ base: "xs", sm: "md" }}
+                as="span"
+                display="inline-block"
+                pb={{ base: "1px", sm: "3px" }}
+                color="gray.500"
+                _dark={{ color: "gray.400" }}
+              >
+                / {formatBytes(myLimits.traffic_limit)}
+              </Text>
+            </HStack>
+          ) : !isSudoAdmin && myLimits ? (
+            formatBytes(myLimits.current_consumed_traffic)
+          ) : (
+            systemData &&
+            formatBytes(
+              systemData.incoming_bandwidth + systemData.outgoing_bandwidth
+            )
           )
         }
         subContent={
-          systemData && (
+          !isSudoAdmin && myLimits && myLimits.traffic_limit !== null ? (
             <HStack
-              spacing={{ base: 1.5, sm: 2.5 }}
+              spacing={1.5}
               fontSize="xs"
-              color="gray.500"
-              _dark={{ color: "gray.400" }}
+              color={myLimits.is_quota_exceeded ? "red.500" : "green.500"}
               fontWeight="medium"
-              flexWrap="wrap"
             >
-              <Text as="span" title="Download speed">
-                <chakra.span color="green.500" fontWeight="bold">
-                  ↓
-                </chakra.span>{" "}
-                {formatBytes(systemData.incoming_bandwidth_speed || 0)}/s
-              </Text>
-              <Text as="span" title="Upload speed">
-                <chakra.span color="blue.400" fontWeight="bold">
-                  ↑
-                </chakra.span>{" "}
-                {formatBytes(systemData.outgoing_bandwidth_speed || 0)}/s
+              <Box
+                w="2"
+                h="2"
+                rounded="full"
+                bg={myLimits.is_quota_exceeded ? "red.500" : "green.500"}
+              />
+              <Text>
+                {myLimits.is_quota_exceeded
+                  ? t("marzyar.quotaExceeded", "Quota Exceeded")
+                  : `${Math.max(
+                      0,
+                      Math.round(
+                        (1 -
+                          (myLimits.oversell_allowed
+                            ? myLimits.current_consumed_traffic
+                            : myLimits.current_allocated_traffic) /
+                            myLimits.traffic_limit) *
+                          100
+                      )
+                    )}% ${t("remaining", "remaining")}`}
               </Text>
             </HStack>
+          ) : (
+            systemData && (
+              <HStack
+                spacing={{ base: 1.5, sm: 2.5 }}
+                fontSize="xs"
+                color="gray.500"
+                _dark={{ color: "gray.400" }}
+                fontWeight="medium"
+                flexWrap="wrap"
+              >
+                <Text as="span" title="Download speed">
+                  <chakra.span color="green.500" fontWeight="bold">
+                    ↓
+                  </chakra.span>{" "}
+                  {formatBytes(systemData.incoming_bandwidth_speed || 0)}/s
+                </Text>
+                <Text as="span" title="Upload speed">
+                  <chakra.span color="blue.400" fontWeight="bold">
+                    ↑
+                  </chakra.span>{" "}
+                  {formatBytes(systemData.outgoing_bandwidth_speed || 0)}/s
+                </Text>
+              </HStack>
+            )
           )
         }
         popoverContent={
-          systemData && (
+          !isSudoAdmin && myLimits ? (
             <VStack spacing={2} align="stretch" fontSize="xs">
               <Text
                 fontWeight="semibold"
@@ -630,102 +731,159 @@ export const Statistics: FC<BoxProps> = (props) => {
                 color="gray.700"
                 _dark={{ borderColor: "gray.700", color: "gray.200" }}
               >
-                {t("bandwidthBreakdown")}
+                {t("marzyar.quotaOverview", "Reseller Quota")}
               </Text>
 
-              {/* Total Download */}
               <HStack justify="space-between">
-                <HStack spacing={1.5}>
-                  <chakra.span color="green.500" fontWeight="bold">
-                    ↓
-                  </chakra.span>
-                  <Text color="gray.600" _dark={{ color: "gray.300" }}>
-                    {t("download")}
-                  </Text>
-                </HStack>
-                <Text fontWeight="semibold">
-                  {formatBytes(systemData.outgoing_bandwidth)}
+                <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                  {t("marzyar.consumedTraffic", "Consumed Traffic")}
+                </Text>
+                <Text fontWeight="semibold" color="orange.500">
+                  {formatBytes(myLimits.current_consumed_traffic)}
                 </Text>
               </HStack>
 
-              {/* Total Upload */}
               <HStack justify="space-between">
-                <HStack spacing={1.5}>
-                  <chakra.span color="blue.400" fontWeight="bold">
-                    ↑
-                  </chakra.span>
-                  <Text color="gray.600" _dark={{ color: "gray.300" }}>
-                    {t("upload")}
-                  </Text>
-                </HStack>
-                <Text fontWeight="semibold">
-                  {formatBytes(systemData.incoming_bandwidth)}
+                <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                  {t("marzyar.allocatedLimits", "Allocated Limits")}
+                </Text>
+                <Text fontWeight="semibold" color="blue.400">
+                  {formatBytes(myLimits.current_allocated_traffic)}
                 </Text>
               </HStack>
 
-              {/* Total Cumulative */}
               <HStack justify="space-between">
-                <Text
-                  fontWeight="semibold"
-                  color="gray.700"
-                  _dark={{ color: "gray.200" }}
+                <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                  {t("marzyar.trafficLimit", "Quota Limit")}
+                </Text>
+                <Text fontWeight="semibold">
+                  {myLimits.traffic_limit !== null
+                    ? formatBytes(myLimits.traffic_limit)
+                    : t("unlimited", "Unlimited")}
+                </Text>
+              </HStack>
+
+              <HStack justify="space-between">
+                <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                  {t("marzyar.quotaMode", "Quota Mode")}
+                </Text>
+                <Badge
+                  colorScheme={myLimits.oversell_allowed ? "purple" : "cyan"}
+                  rounded="md"
+                  px={1.5}
                 >
-                  {t("total")}
-                </Text>
-                <Text fontWeight="semibold">
-                  {formatBytes(
-                    systemData.incoming_bandwidth +
-                      systemData.outgoing_bandwidth
-                  )}
-                </Text>
-              </HStack>
-
-              <Divider
-                my={1}
-                borderColor="light-border"
-                _dark={{ borderColor: "gray.700" }}
-              />
-
-              <Text
-                fontSize="2xs"
-                textTransform="uppercase"
-                fontWeight="bold"
-                color="gray.400"
-                letterSpacing="wider"
-              >
-                {t("realtimeSpeed")}
-              </Text>
-
-              {/* Real-time Download */}
-              <HStack justify="space-between">
-                <HStack spacing={1.5}>
-                  <chakra.span color="green.500" fontWeight="bold">
-                    ↓
-                  </chakra.span>
-                  <Text color="gray.600" _dark={{ color: "gray.300" }}>
-                    {t("download")}
-                  </Text>
-                </HStack>
-                <Badge colorScheme="green" rounded="md" px={2}>
-                  {formatBytes(systemData.incoming_bandwidth_speed || 0)}/s
-                </Badge>
-              </HStack>
-
-              {/* Real-time Upload */}
-              <HStack justify="space-between">
-                <HStack spacing={1.5}>
-                  <chakra.span color="blue.400" fontWeight="bold">
-                    ↑
-                  </chakra.span>
-                  <Text color="gray.600" _dark={{ color: "gray.300" }}>
-                    {t("upload")}
-                  </Text>
-                </HStack>
-                <Badge colorScheme="blue" rounded="md" px={2}>
-                  {formatBytes(systemData.outgoing_bandwidth_speed || 0)}/s
+                  {myLimits.oversell_allowed ? "Oversell" : "Strict"}
                 </Badge>
               </HStack>
             </VStack>
+          ) : (
+            systemData && (
+              <VStack spacing={2} align="stretch" fontSize="xs">
+                <Text
+                  fontWeight="semibold"
+                  pb={1}
+                  borderBottomWidth="1px"
+                  borderColor="light-border"
+                  color="gray.700"
+                  _dark={{ borderColor: "gray.700", color: "gray.200" }}
+                >
+                  {t("bandwidthBreakdown")}
+                </Text>
+
+                {/* Total Download */}
+                <HStack justify="space-between">
+                  <HStack spacing={1.5}>
+                    <chakra.span color="green.500" fontWeight="bold">
+                      ↓
+                    </chakra.span>
+                    <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                      {t("download")}
+                    </Text>
+                  </HStack>
+                  <Text fontWeight="semibold">
+                    {formatBytes(systemData.outgoing_bandwidth)}
+                  </Text>
+                </HStack>
+
+                {/* Total Upload */}
+                <HStack justify="space-between">
+                  <HStack spacing={1.5}>
+                    <chakra.span color="blue.400" fontWeight="bold">
+                      ↑
+                    </chakra.span>
+                    <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                      {t("upload")}
+                    </Text>
+                  </HStack>
+                  <Text fontWeight="semibold">
+                    {formatBytes(systemData.incoming_bandwidth)}
+                  </Text>
+                </HStack>
+
+                {/* Total Cumulative */}
+                <HStack justify="space-between">
+                  <Text
+                    fontWeight="semibold"
+                    color="gray.700"
+                    _dark={{ color: "gray.200" }}
+                  >
+                    {t("total")}
+                  </Text>
+                  <Text fontWeight="semibold">
+                    {formatBytes(
+                      systemData.incoming_bandwidth +
+                        systemData.outgoing_bandwidth
+                    )}
+                  </Text>
+                </HStack>
+
+                <Divider
+                  my={1}
+                  borderColor="light-border"
+                  _dark={{ borderColor: "gray.700" }}
+                />
+
+                <Text
+                  fontSize="2xs"
+                  textTransform="uppercase"
+                  fontWeight="bold"
+                  color="gray.400"
+                  letterSpacing="wider"
+                >
+                  {t("realtimeSpeed")}
+                </Text>
+
+                {/* Real-time Download */}
+                <HStack justify="space-between">
+                  <HStack spacing={1.5}>
+                    <chakra.span color="green.500" fontWeight="bold">
+                      ↓
+                    </chakra.span>
+                    <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                      {t("download")}
+                    </Text>
+                  </HStack>
+                  <Badge colorScheme="green" rounded="md" px={2}>
+                    {formatBytes(systemData.incoming_bandwidth_speed || 0)}/s
+                  </Badge>
+                </HStack>
+
+                {/* Real-time Upload */}
+                <HStack justify="space-between">
+                  <HStack spacing={1.5}>
+                    <chakra.span color="blue.400" fontWeight="bold">
+                      ↑
+                    </chakra.span>
+                    <Text color="gray.600" _dark={{ color: "gray.300" }}>
+                      {t("upload")}
+                    </Text>
+                  </HStack>
+                  <Badge colorScheme="blue" rounded="md" px={2}>
+                    {formatBytes(systemData.outgoing_bandwidth_speed || 0)}/s
+                  </Badge>
+                </HStack>
+              </VStack>
+            )
           )
         }
         icon={<NetworkIcon />}

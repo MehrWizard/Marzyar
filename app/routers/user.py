@@ -218,8 +218,8 @@ def reset_user_data_usage(
                 status_code=403,
                 detail="Cannot reset data usage while user is locked due to admin quota limits."
             )
-        target_admin_id = dbuser.admin_id or admin.id
-        settings = get_admin_settings(db, target_admin_id)
+        target_admin_id = dbuser.admin_id or getattr(admin, "id", None) or (crud.get_admin(db, admin.username).id if crud.get_admin(db, admin.username) else None)
+        settings = get_admin_settings(db, target_admin_id) if target_admin_id else None
         if settings and settings.traffic_limit is not None:
             consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
             if consumed >= settings.traffic_limit:
@@ -379,8 +379,8 @@ def active_next_plan(
                 status_code=403,
                 detail="Cannot activate next plan while user is locked due to admin quota limits."
             )
-        target_admin_id = dbuser.admin_id or admin.id
-        settings = get_admin_settings(db, target_admin_id)
+        target_admin_id = dbuser.admin_id or getattr(admin, "id", None) or (crud.get_admin(db, admin.username).id if crud.get_admin(db, admin.username) else None)
+        settings = get_admin_settings(db, target_admin_id) if target_admin_id else None
         if settings and settings.traffic_limit is not None:
             consumed = get_admin_total_consumed_traffic(db, target_admin_id, settings, for_update=True)
             if consumed >= settings.traffic_limit:

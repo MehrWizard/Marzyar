@@ -285,3 +285,26 @@ class TestAuditAdminQuotas:
         db.refresh(u2)
         assert u1.status == UserStatus.active
         assert u2.status == UserStatus.active
+
+    def test_pydantic_admin_model_with_and_without_id(self, db, make_admin, make_settings, make_user):
+        """Verify check_admin_can_create_user and modify_user work seamlessly with Pydantic Admin models."""
+        from app.models.admin import Admin as PydanticAdmin
+        orm_admin = make_admin()
+        make_settings(orm_admin, users_limit=5, traffic_limit=10000, oversell_allowed=True)
+
+        # 1. Pydantic Admin with explicit id
+        p_admin_with_id = PydanticAdmin(id=orm_admin.id, username=orm_admin.username, is_sudo=False)
+        check_admin_can_create_user(db, p_admin_with_id, data_limit=1000, inbounds=None)
+
+        # 2. Pydantic Admin with id=None (fallback via username lookup)
+        p_admin_no_id = PydanticAdmin(id=None, username=orm_admin.username, is_sudo=False)
+        check_admin_can_create_user(db, p_admin_no_id, data_limit=1000, inbounds=None)
+
+        # 3. Modify user with Pydantic Admin
+        u = make_user(orm_admin, status=UserStatus.active)
+        check_admin_can_modify_user(
+            db, p_admin_with_id, target_user=u, new_data_limit=2000, new_inbounds=None, new_status=UserStatus.active
+        )
+        check_admin_can_modify_user(
+            db, p_admin_no_id, target_user=u, new_data_limit=2000, new_inbounds=None, new_status=UserStatus.active
+        )

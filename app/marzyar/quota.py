@@ -28,23 +28,27 @@ def check_admin_can_create_user(
     if admin.is_sudo:
         return
 
+    admin_id = crud.get_admin_id(db, admin)
+    if not admin_id:
+        return
+
     # Lock admin settings row to prevent concurrent race conditions on user creation (TOCTOU)
     try:
         settings = (
             db.query(MarzyarAdminSettings)
-            .filter(MarzyarAdminSettings.admin_id == admin.id)
+            .filter(MarzyarAdminSettings.admin_id == admin_id)
             .with_for_update()
             .first()
         )
     except Exception:
-        settings = crud.get_admin_settings(db, admin.id)
+        settings = crud.get_admin_settings(db, admin_id)
 
     if not settings:
         return
 
     # 1. Check user count limit
     if settings.users_limit is not None:
-        current_count = crud.get_admin_user_count(db, admin.id, for_update=True)
+        current_count = crud.get_admin_user_count(db, admin_id, for_update=True)
         if current_count >= settings.users_limit:
             raise HTTPException(
                 status_code=403,
@@ -64,7 +68,7 @@ def check_admin_can_create_user(
 
     # 3. Check traffic quota
     if settings.traffic_limit is not None:
-        consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings, for_update=True)
+        consumed = crud.get_admin_total_consumed_traffic(db, admin_id, settings, for_update=True)
         if consumed >= settings.traffic_limit:
             raise HTTPException(
                 status_code=403,
@@ -83,7 +87,7 @@ def check_admin_can_create_user(
                     status_code=400,
                     detail="Cannot specify unlimited data for next plan when overselling is disabled for your account."
                 )
-            allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
+            allocated = crud.get_admin_allocated_traffic(db, admin_id, for_update=True)
             if allocated + data_limit > settings.traffic_limit:
                 raise HTTPException(
                     status_code=403,
@@ -108,6 +112,10 @@ def check_admin_can_modify_user(
     if admin.is_sudo:
         return
 
+    admin_id = crud.get_admin_id(db, admin)
+    if not admin_id:
+        return
+
     # 1. Prevent activating or putting on-hold a locked user if the admin is still locked
     if crud.is_user_locked(db, target_user.id):
         if new_status in [UserStatus.active, UserStatus.on_hold]:
@@ -120,12 +128,12 @@ def check_admin_can_modify_user(
     try:
         settings = (
             db.query(MarzyarAdminSettings)
-            .filter(MarzyarAdminSettings.admin_id == admin.id)
+            .filter(MarzyarAdminSettings.admin_id == admin_id)
             .with_for_update()
             .first()
         )
     except Exception:
-        settings = crud.get_admin_settings(db, admin.id)
+        settings = crud.get_admin_settings(db, admin_id)
 
     if not settings:
         return
@@ -184,7 +192,7 @@ def check_admin_can_modify_user(
             )
         )
 
-        consumed = crud.get_admin_total_consumed_traffic(db, admin.id, settings, for_update=True)
+        consumed = crud.get_admin_total_consumed_traffic(db, admin_id, settings, for_update=True)
         is_consumed_exceeded = consumed >= settings.traffic_limit
 
         if is_activating and is_consumed_exceeded:
@@ -207,7 +215,7 @@ def check_admin_can_modify_user(
                 )
 
             if delta > 0:
-                allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
+                allocated = crud.get_admin_allocated_traffic(db, admin_id, for_update=True)
                 if allocated + delta > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,
@@ -215,7 +223,7 @@ def check_admin_can_modify_user(
                     )
 
             if is_activating:
-                allocated = crud.get_admin_allocated_traffic(db, admin.id, for_update=True)
+                allocated = crud.get_admin_allocated_traffic(db, admin_id, for_update=True)
                 if allocated + delta > settings.traffic_limit:
                     raise HTTPException(
                         status_code=403,

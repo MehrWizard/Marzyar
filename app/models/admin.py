@@ -19,6 +19,7 @@ class Token(BaseModel):
 
 
 class Admin(BaseModel):
+    id: Optional[int] = None
     username: str
     is_sudo: bool
     telegram_id: Optional[int] = None
@@ -45,7 +46,8 @@ class Admin(BaseModel):
             return
 
         if payload['username'] in SUDOERS and payload['is_sudo'] is True:
-            return cls(username=payload['username'], is_sudo=True)
+            dbadmin = crud.get_admin(db, payload['username'])
+            return cls(id=dbadmin.id if dbadmin else None, username=payload['username'], is_sudo=True)
 
         dbadmin = crud.get_admin(db, payload['username'])
         if not dbadmin:
