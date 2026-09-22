@@ -1,6 +1,7 @@
 import base64
 import random
 import secrets
+import time
 from collections import defaultdict
 from datetime import datetime as dt
 from datetime import timedelta
@@ -160,13 +161,12 @@ def setup_format_variables(extra_data: dict) -> dict:
     user_status = extra_data.get("status")
     expire_timestamp = extra_data.get("expire")
     on_hold_expire_duration = extra_data.get("on_hold_expire_duration")
-    now = dt.utcnow()
-    now_ts = now.timestamp()
+    now_ts = time.time()
 
     if user_status != UserStatus.on_hold:
         if expire_timestamp is not None and expire_timestamp >= 0:
-            seconds_left = expire_timestamp - int(dt.utcnow().timestamp())
-            expire_datetime = dt.fromtimestamp(expire_timestamp)
+            seconds_left = max(0, expire_timestamp - int(now_ts))
+            expire_datetime = dt.utcfromtimestamp(expire_timestamp)
             expire_date = expire_datetime.date()
             jalali_expire_date = jd.fromgregorian(
                 year=expire_date.year, month=expire_date.month, day=expire_date.day

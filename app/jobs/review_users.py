@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
@@ -56,7 +57,7 @@ def reset_user_by_next_report(db: Session, user: "User"):
 
 def review():
     now = datetime.utcnow()
-    now_ts = now.timestamp()
+    now_ts = time.time()
     with GetDB() as db:
         for user in get_users(db, status=UserStatus.active):
 
@@ -92,17 +93,13 @@ def review():
             logger.info(f"User \"{user.username}\" status changed to {status}")
 
         for user in get_users(db, status=UserStatus.on_hold):
-
-            if user.edit_at:
-                base_time = datetime.timestamp(user.edit_at)
-            else:
-                base_time = datetime.timestamp(user.created_at)
+            base_time = user.edit_at or user.created_at
 
             # Check if the user is online After or at 'base_time'
-            if user.online_at and base_time <= datetime.timestamp(user.online_at):
+            if user.online_at and base_time and user.online_at >= base_time:
                 status = UserStatus.active
 
-            elif user.on_hold_timeout and (datetime.timestamp(user.on_hold_timeout) <= (now_ts)):
+            elif user.on_hold_timeout and user.on_hold_timeout <= now:
                 # If the user didn't connect within the timeout period, change status to "Active"
                 status = UserStatus.active
 

@@ -300,3 +300,42 @@ class TestLockedUserQueries:
         ids1 = crud.get_locked_user_ids_for_admin(db, admin1.id)
         assert u1.id in ids1
         assert u2.id not in ids1
+
+
+# ======================================================================
+# Timezone & Expiration Invariance
+# ======================================================================
+class TestTimezoneAndExpirationInvariance:
+
+    def test_start_user_expire_time_invariance(self, db, make_admin, make_user):
+        import time
+        from app.db.crud import start_user_expire
+
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.on_hold)
+        u.on_hold_expire_duration = 3600
+        db.commit()
+
+        start_time = time.time()
+        start_user_expire(db, u)
+        db.refresh(u)
+
+        assert u.expire is not None
+        assert abs(u.expire - (int(start_time) + 3600)) <= 2
+        assert u.on_hold_expire_duration is None
+
+    def test_update_user_future_expire_activates_expired_user(self, db, make_admin, make_user):
+        import time
+        from app.db.crud import update_user
+        from app.models.user import UserModify
+
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.expired, expire=int(time.time()) - 100)
+        db.commit()
+
+        modify = UserModify(expire=int(time.time()) + 3600)
+        update_user(db, u, modify)
+        db.refresh(u)
+
+        assert u.status == UserStatus.active
+        assert u.expire > int(time.time())

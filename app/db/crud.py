@@ -580,7 +580,7 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
     if modify.expire is not None:
         dbuser.expire = (modify.expire or None)
         if dbuser.status in (UserStatus.active, UserStatus.expired):
-            if not dbuser.expire or dbuser.expire > datetime.utcnow().timestamp():
+            if not dbuser.expire or dbuser.expire > time.time():
                 dbuser.status = UserStatus.active
                 for days_left in sorted(NOTIFY_DAYS_LEFT):
                     if not dbuser.expire or (calculate_expiration_days(
@@ -749,7 +749,7 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
     )
     if dbuser.next_plan.expire:
         if dbuser.next_plan.expire < 1000000000:
-            dbuser.expire = int(datetime.utcnow().timestamp()) + dbuser.next_plan.expire
+            dbuser.expire = int(time.time()) + dbuser.next_plan.expire
         else:
             dbuser.expire = dbuser.next_plan.expire
     else:
@@ -1147,7 +1147,7 @@ def start_user_expire(db: Session, dbuser: User) -> User:
     Returns:
         User: The updated user object.
     """
-    expire = int(datetime.utcnow().timestamp()) + dbuser.on_hold_expire_duration
+    expire = int(time.time()) + dbuser.on_hold_expire_duration
     dbuser.expire = expire
     dbuser.on_hold_expire_duration = None
     dbuser.on_hold_timeout = None
