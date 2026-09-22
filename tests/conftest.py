@@ -74,7 +74,7 @@ import types as _types
 _app_mod = _types.ModuleType("app")
 _app_mod.__path__ = [os.path.join(os.path.dirname(__file__), "..", "app")]
 _app_mod.__package__ = "app"
-_app_mod.__version__ = "0.1.24"
+_app_mod.__version__ = "0.1.25"
 _app_mod.logger = logging.getLogger("test")
 _app_mod.scheduler = MagicMock()
 
@@ -92,7 +92,9 @@ _app_mod.xray = _xray_mod
 sys.modules["app"] = _app_mod
 sys.modules["app.xray"] = _xray_mod
 sys.modules["app.xray.config"] = _xray_config
-sys.modules["app.xray.operations"] = MagicMock()
+_xray_operations = MagicMock()
+_xray_mod.operations = _xray_operations
+sys.modules["app.xray.operations"] = _xray_operations
 
 _routers_mod = _types.ModuleType("app.routers")
 _routers_mod.__path__ = [os.path.join(_app_mod.__path__[0], "routers")]
@@ -111,6 +113,7 @@ for _mod_name in [
 # 4. Now safe to import app.db and app.marzyar
 # ---------------------------------------------------------------------------
 from app.db.base import Base
+import app.db.models  # noqa: F401
 from app.db.models import Admin, User
 from app.models.user import UserStatus, UserDataLimitResetStrategy
 from app.marzyar.models import MarzyarAdminSettings, MarzyarUserLock

@@ -53,15 +53,22 @@ class ProxyTypes(str, Enum):
             return ShadowsocksSettings
 
 
-class ProxySettings(BaseModel, use_enum_values=True):
+class ProxySettings(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
     @classmethod
     def from_dict(cls, proxy_type: ProxyTypes, _dict: dict):
         return ProxyTypes(proxy_type).settings_model.model_validate(_dict)
 
     def dict(self, *, no_obj=False, **kwargs):
         if no_obj:
+            if hasattr(self, "model_dump"):
+                return self.model_dump(mode="json")
             return json.loads(self.json())
+        if hasattr(self, "model_dump"):
+            return self.model_dump(**kwargs)
         return super().dict(**kwargs)
+
 
 
 class VMessSettings(ProxySettings):

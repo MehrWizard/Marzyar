@@ -567,4 +567,56 @@ class TestHardeningAndEdgeCases:
         deleted = autodelete_expired_users(db)
         assert any(x.id == u.id for x in deleted)
 
+    def test_remove_user_route_null_admin(self, db, make_admin, make_user):
+        from fastapi import BackgroundTasks
+        from unittest.mock import MagicMock
+        from app.routers.user import remove_user
+        admin = make_admin(is_sudo=True)
+        u = make_user(admin)
+        u.admin_id = None
+        u.admin = None
+        db.commit()
+
+        bg = BackgroundTasks()
+        res = remove_user(bg=bg, db=db, dbuser=u, admin=admin)
+        assert res == {"detail": "User successfully deleted"}
+
+    def test_setup_format_variables_none_used_traffic(self):
+        from app.subscription.share import setup_format_variables
+        vars_dict = setup_format_variables({
+            "data_limit": 1024 * 1024,
+            "used_traffic": None,
+            "status": "active",
+        })
+        assert vars_dict["DATA_USAGE"] == "0 B"
+        assert vars_dict["DATA_LIMIT"] == "1.0 MB"
+        assert vars_dict["DATA_LEFT"] == "1.0 MB"
+
+    def test_user_subscription_with_client_type_updates_sub(self, db, make_admin, make_user):
+        from unittest.mock import MagicMock, patch
+        from app.routers.subscription import user_subscription_with_client_type
+        from app.db.models import Proxy
+        admin = make_admin()
+        u = make_user(admin)
+        proxy = Proxy(type="vless", settings={"id": "35e4e39c-7d5c-4f4b-8b71-558e4f37ff53", "flow": ""}, user_id=u.id)
+        db.add(proxy)
+        db.commit()
+        db.refresh(u)
+
+        mock_req = MagicMock(url="http://test/sub/token/clash")
+        with patch("app.models.user.create_subscription_token", return_value="fake_token"), \
+             patch("app.routers.subscription.generate_subscription", return_value="proxies: []"):
+            res = user_subscription_with_client_type(
+                request=mock_req,
+                dbuser=u,
+                client_type="clash",
+                db=db,
+                user_agent="ClashForWindows/0.20",
+            )
+            assert res.status_code == 200
+        db.refresh(u)
+        assert u.sub_last_user_agent == "ClashForWindows/0.20"
+        assert u.sub_updated_at is not None
+
+
 

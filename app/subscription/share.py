@@ -3,8 +3,7 @@ import random
 import secrets
 import time
 from collections import defaultdict
-from datetime import datetime as dt
-from datetime import timedelta
+from datetime import datetime as dt, timedelta, timezone
 from typing import TYPE_CHECKING, List, Literal, Union
 
 from jdatetime import date as jd
@@ -166,13 +165,13 @@ def setup_format_variables(extra_data: dict) -> dict:
     if user_status != UserStatus.on_hold:
         if expire_timestamp is not None and expire_timestamp >= 0:
             seconds_left = max(0, expire_timestamp - int(now_ts))
-            expire_datetime = dt.utcfromtimestamp(expire_timestamp)
+            expire_datetime = dt.fromtimestamp(expire_timestamp, timezone.utc)
             expire_date = expire_datetime.date()
             jalali_expire_date = jd.fromgregorian(
                 year=expire_date.year, month=expire_date.month, day=expire_date.day
             ).strftime("%Y-%m-%d")
             if now_ts < expire_timestamp:
-                days_left = (expire_datetime - dt.utcnow()).days + 1
+                days_left = (expire_datetime - dt.now(timezone.utc)).days + 1
                 time_left = format_time_left(seconds_left)
             else:
                 days_left = "0"
@@ -197,9 +196,8 @@ def setup_format_variables(extra_data: dict) -> dict:
 
     if extra_data.get("data_limit"):
         data_limit = readable_size(extra_data["data_limit"])
-        data_left = extra_data["data_limit"] - extra_data["used_traffic"]
-        if data_left < 0:
-            data_left = 0
+        used = extra_data.get("used_traffic") or 0
+        data_left = max(0, extra_data["data_limit"] - used)
         data_left = readable_size(data_left)
     else:
         data_limit = "∞"
