@@ -1,9 +1,6 @@
 <p align="center">
   <a href="https://github.com/MehrWizard/Marzyar" target="_blank" rel="noopener noreferrer">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-      <img width="160" height="160" src="docs/assets/logo-light.svg" alt="Marzyar Logo">
-    </picture>
+    <img width="160" height="160" src="docs/assets/marzyar.png" alt="Marzyar Logo">
   </a>
 </p>
 
