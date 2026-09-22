@@ -78,7 +78,7 @@ import types as _types
 _app_mod = _types.ModuleType("app")
 _app_mod.__path__ = [os.path.join(os.path.dirname(__file__), "..", "app")]
 _app_mod.__package__ = "app"
-_app_mod.__version__ = "0.1.27"
+_app_mod.__version__ = "0.1.28"
 _app_mod.logger = logging.getLogger("test")
 _app_mod.scheduler = MagicMock()
 

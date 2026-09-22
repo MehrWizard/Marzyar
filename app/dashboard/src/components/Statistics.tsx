@@ -261,10 +261,16 @@ export const Statistics: FC<BoxProps> = (props) => {
   const { t } = useTranslation();
 
   const { userData, getUserIsSuccess, getUserIsPending } = useGetUser();
-  const isSudoAdmin = !getUserIsPending && getUserIsSuccess ? userData.is_sudo : false;
+  const isSudoAdmin = !getUserIsPending && getUserIsSuccess ? userData.is_sudo : (userData?.is_sudo ?? false);
   const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudoAdmin);
-  const effectiveUsersLimit =
-    !isSudoAdmin && (myLimits?.users_limit ?? systemData?.users_limit ?? null);
+  const effectiveUsersLimit: number | null =
+    !isSudoAdmin
+      ? (typeof myLimits?.users_limit === "number"
+          ? myLimits.users_limit
+          : typeof systemData?.users_limit === "number"
+          ? systemData.users_limit
+          : null)
+      : null;
 
   return (
     <SimpleGrid
@@ -456,7 +462,7 @@ export const Statistics: FC<BoxProps> = (props) => {
                 _dark={{ color: "gray.400" }}
               >
                 / {numberWithCommas(
-                  effectiveUsersLimit !== null && effectiveUsersLimit !== undefined
+                  typeof effectiveUsersLimit === "number"
                     ? effectiveUsersLimit
                     : systemData.total_user
                 )}
@@ -465,7 +471,7 @@ export const Statistics: FC<BoxProps> = (props) => {
           )
         }
         subContent={
-          effectiveUsersLimit !== null ? (
+          typeof effectiveUsersLimit === "number" ? (
             <HStack
               spacing={1.5}
               alignItems="center"
