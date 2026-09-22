@@ -339,3 +339,40 @@ class TestTimezoneAndExpirationInvariance:
 
         assert u.status == UserStatus.active
         assert u.expire > int(time.time())
+
+    def test_reset_user_data_usage_leaves_expired_user_expired(self, db, make_admin, make_user):
+        import time
+        from app.db.crud import reset_user_data_usage
+
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.limited, expire=int(time.time()) - 500, used_traffic=500, data_limit=500)
+        reset_user_data_usage(db, u)
+        db.refresh(u)
+
+        assert u.status == UserStatus.expired
+        assert u.used_traffic == 0
+
+    def test_reset_user_data_usage_leaves_on_hold_user_on_hold(self, db, make_admin, make_user):
+        from app.db.crud import reset_user_data_usage
+
+        admin = make_admin()
+        u = make_user(admin, status=UserStatus.on_hold, used_traffic=100)
+        reset_user_data_usage(db, u)
+        db.refresh(u)
+
+        assert u.status == UserStatus.on_hold
+        assert u.used_traffic == 0
+
+    def test_reset_all_users_data_usage_leaves_expired_user_expired(self, db, make_admin, make_user):
+        import time
+        from app.db.crud import reset_all_users_data_usage
+
+        admin = make_admin()
+        u1 = make_user(admin, username="u1", status=UserStatus.limited, expire=int(time.time()) - 500, used_traffic=500, data_limit=500)
+        u2 = make_user(admin, username="u2", status=UserStatus.limited, expire=int(time.time()) + 5000, used_traffic=500, data_limit=500)
+        reset_all_users_data_usage(db, admin)
+        db.refresh(u1)
+        db.refresh(u2)
+
+        assert u1.status == UserStatus.expired
+        assert u2.status == UserStatus.active

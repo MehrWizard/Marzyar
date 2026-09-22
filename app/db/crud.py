@@ -669,18 +669,27 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
 
     dbuser.used_traffic = 0
     dbuser.node_usages.clear()
+    now_ts = time.time()
+    is_expired = bool(dbuser.expire and dbuser.expire <= now_ts)
+
     try:
         from app.marzyar.models import MarzyarUserLock
         lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
         if lock:
-            if lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value):
+            if is_expired:
+                lock.original_status = UserStatus.expired.value
+            elif lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value, UserStatus.on_hold.value):
                 lock.original_status = UserStatus.active.value
             dbuser.status = UserStatus.disabled
         else:
-            if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+            if is_expired:
+                dbuser.status = UserStatus.expired
+            elif dbuser.status not in (UserStatus.expired, UserStatus.disabled, UserStatus.on_hold):
                 dbuser.status = UserStatus.active
     except Exception:
-        if dbuser.status not in (UserStatus.expired, UserStatus.disabled):
+        if is_expired:
+            dbuser.status = UserStatus.expired
+        elif dbuser.status not in (UserStatus.expired, UserStatus.disabled, UserStatus.on_hold):
             dbuser.status = UserStatus.active
 
     if dbuser.next_plan:
@@ -849,17 +858,27 @@ def reset_all_users_data_usage(db: Session, admin: Optional[Admin] = None):
             affected_admin_ids.add(dbuser.admin_id)
             admin_traffic_to_increment[dbuser.admin_id] += dbuser.used_traffic
         dbuser.used_traffic = 0
+        now_ts = time.time()
+        is_expired = bool(dbuser.expire and dbuser.expire <= now_ts)
+
         try:
             from app.marzyar.models import MarzyarUserLock
             lock = db.query(MarzyarUserLock).filter_by(user_id=dbuser.id).first()
             if lock:
-                if lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value):
+                if is_expired:
+                    lock.original_status = UserStatus.expired.value
+                elif lock.original_status not in (UserStatus.expired.value, UserStatus.disabled.value, UserStatus.on_hold.value):
                     lock.original_status = UserStatus.active.value
                 dbuser.status = UserStatus.disabled
-            elif dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
-                dbuser.status = UserStatus.active
+            else:
+                if is_expired:
+                    dbuser.status = UserStatus.expired
+                elif dbuser.status not in (UserStatus.expired, UserStatus.disabled, UserStatus.on_hold):
+                    dbuser.status = UserStatus.active
         except Exception:
-            if dbuser.status not in [UserStatus.on_hold, UserStatus.expired, UserStatus.disabled]:
+            if is_expired:
+                dbuser.status = UserStatus.expired
+            elif dbuser.status not in (UserStatus.expired, UserStatus.disabled, UserStatus.on_hold):
                 dbuser.status = UserStatus.active
         dbuser.usage_logs.clear()
         dbuser.node_usages.clear()
