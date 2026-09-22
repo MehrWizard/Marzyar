@@ -392,5 +392,13 @@
   "marzyar.lockedUsersBanner": "سهمیه ترافیک به پایان رسیده است! کاربران فعال قفل و از پروکسی جدا شده‌اند.",
   "marzyar.usersLocked": "{{count}} کاربر قفل و از پروکسی قطع شده‌اند.",
   "marzyar.createUserQuotaExceeded": "امکان ساخت کاربر وجود ندارد: سهمیه ترافیک ادمین به پایان رسیده است",
-  "marzyar.createUserLimitExceeded": "امکان ساخت کاربر وجود ندارد: سقف تعداد کاربران ادمین پر شده است"
+  "marzyar.createUserLimitExceeded": "امکان ساخت کاربر وجود ندارد: سقف تعداد کاربران ادمین پر شده است",
+  "marzyar.createUserAllocationExceeded": "امکان ساخت کاربر وجود ندارد: سقف تخصیص ترافیک پر شده است (فروش بیش از حد غیرفعال است)",
+  "marzyar.strictAllocationExceeded": "سقف تخصیص ترافیک پر شده است",
+  "marzyar.strictAllocationExceededDesc": "سقف مجاز تخصیص ترافیک پر شده است. امکان ساخت کاربر وجود ندارد زیرا مجموع حجم‌های تعیین شده از سهمیه شما بیشتر خواهد شد.",
+  "marzyar.unlimitedNotAllowed": "تعیین سقف حجم الزامی است",
+  "marzyar.unlimitedNotAllowedStrict": "امکان ساخت کاربر با حجم نامحدود وجود ندارد. فروش بیش از حد (اورسلینگ) برای حساب شما غیرفعال است؛ لطفاً سقف حجم مشخص کنید.",
+  "marzyar.allocationCapRemaining": "سقف تخصیص محدود: {{remaining}} باقی‌مانده از مجموع {{total}}",
+  "marzyar.noRemainingAllocation": "سقف تخصیص ترافیک به پایان رسیده است (۰ گیگابایت باقی‌مانده). امکان تخصیص حجم به کاربر جدید وجود ندارد مگر اینکه حجم کاربران قبلی کاهش یابد یا سهمیه شارژ شود.",
+  "marzyar.exceedsAllocationCap": "حجم {{requested}} گیگابایت از باقی‌مانده سقف تخصیص شما ({{remaining}} گیگابایت) بیشتر است (سهمیه کل: {{total}})."
 }

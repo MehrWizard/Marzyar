@@ -87,11 +87,37 @@ export const Filters: FC<FilterProps> = ({ ...props }) => {
   const { userData } = useGetUser();
   const isSudo = userData?.is_sudo;
   const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudo);
-  const isCreateDisabled = !isSudo && !!(myLimits?.is_user_limit_exceeded || myLimits?.is_quota_exceeded);
-  const disableReason = myLimits?.is_quota_exceeded
-    ? t("marzyar.createUserQuotaExceeded", "Cannot create user: Admin traffic quota is exceeded")
+  const isAllocationCapReached =
+    !isSudo &&
+    Boolean(
+      myLimits?.is_allocation_limit_reached ||
+        (!myLimits?.oversell_allowed &&
+          myLimits?.traffic_limit !== null &&
+          myLimits?.traffic_limit !== undefined &&
+          (myLimits?.current_allocated_traffic ?? 0) >= myLimits.traffic_limit)
+    );
+  const isCreateDisabled =
+    !isSudo &&
+    !!(
+      myLimits?.is_user_limit_exceeded ||
+      myLimits?.is_quota_exceeded ||
+      isAllocationCapReached
+    );
+  const disableReason = isAllocationCapReached
+    ? t(
+        "marzyar.createUserAllocationExceeded",
+        "Cannot create user: Total data allocation cap reached (strict mode active)"
+      )
+    : myLimits?.is_quota_exceeded
+    ? t(
+        "marzyar.createUserQuotaExceeded",
+        "Cannot create user: Admin traffic quota is exceeded"
+      )
     : myLimits?.is_user_limit_exceeded
-    ? t("marzyar.createUserLimitExceeded", "Cannot create user: Admin accounts limit is reached")
+    ? t(
+        "marzyar.createUserLimitExceeded",
+        "Cannot create user: Admin accounts limit is reached"
+      )
     : "";
   const toast = useToast();
   const { disableAdminUsers, activateAdminUsers } = useAdmins();

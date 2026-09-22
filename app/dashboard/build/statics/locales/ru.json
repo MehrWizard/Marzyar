@@ -359,5 +359,13 @@
   "marzyar.lockedUsersBanner": "Квота исчерпана! Пользователи заблокированы и отключены от прокси.",
   "marzyar.usersLocked": "{{count}} пользователей заблокировано.",
   "marzyar.createUserQuotaExceeded": "Невозможно создать пользователя: квота трафика исчерпана",
-  "marzyar.createUserLimitExceeded": "Невозможно создать пользователя: лимит аккаунтов исчерпан"
+  "marzyar.createUserLimitExceeded": "Невозможно создать пользователя: лимит аккаунтов исчерпан",
+  "marzyar.createUserAllocationExceeded": "Невозможно создать пользователя: исчерпан лимит распределения трафика (оверселлинг отключен)",
+  "marzyar.strictAllocationExceeded": "Превышен лимит распределения трафика",
+  "marzyar.strictAllocationExceededDesc": "Исчерпан общий лимит распределения трафика. Невозможно создать пользователя, так как сумма лимитов превысит квоту.",
+  "marzyar.unlimitedNotAllowed": "Требуется лимит трафика",
+  "marzyar.unlimitedNotAllowedStrict": "Невозможно создать пользователя с безлимитным трафиком. Оверселлинг отключен для вашего аккаунта; укажите лимит трафика.",
+  "marzyar.allocationCapRemaining": "Лимит распределения: осталось {{remaining}} из {{total}}",
+  "marzyar.noRemainingAllocation": "Лимит распределения исчерпан (осталось 0 ГБ). Невозможно выделить трафик новым пользователям, пока не будут снижены лимиты существующих пользователей или пополнена квота.",
+  "marzyar.exceedsAllocationCap": "Лимит в {{requested}} ГБ превышает оставшийся лимит распределения ({{remaining}} ГБ). Общая квота: {{total}}."
 }

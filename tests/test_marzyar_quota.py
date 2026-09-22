@@ -308,3 +308,32 @@ class TestAuditAdminQuotas:
         check_admin_can_modify_user(
             db, p_admin_no_id, target_user=u, new_data_limit=2000, new_inbounds=None, new_status=UserStatus.active
         )
+
+    def test_strict_mode_allocation_cap_error_detail(self, db, make_admin, make_settings, make_user):
+        """Verify strict mode error details and my_limits response."""
+        from app.marzyar.router import get_my_limits
+        from app.models.admin import Admin as PydanticAdmin
+
+        admin = make_admin()
+        make_settings(admin, traffic_limit=10000, oversell_allowed=False)
+        make_user(admin, data_limit=8000, status=UserStatus.active)
+
+        p_admin = PydanticAdmin(id=admin.id, username=admin.username, is_sudo=False)
+
+        # 1. Check get_my_limits: allocated is 8000/10000 -> is_allocation_limit_reached is False
+        limits = get_my_limits(db=db, current_admin=p_admin)
+        assert limits.is_allocation_limit_reached is False
+        assert limits.is_quota_exceeded is False
+
+        # 2. Add user to reach exact 10000 limit
+        make_user(admin, data_limit=2000, status=UserStatus.active)
+        limits2 = get_my_limits(db=db, current_admin=p_admin)
+        assert limits2.is_allocation_limit_reached is True
+        assert limits2.is_quota_exceeded is False  # exactly at limit, not exceeded
+
+        # 3. Trying to create another user throws 403 with allocated detail
+        with pytest.raises(HTTPException) as exc:
+            check_admin_can_create_user(db, p_admin, data_limit=1000, inbounds=None)
+        assert exc.value.status_code == 403
+        assert "allocated" in exc.value.detail.lower()
+        assert "exceed your limit" in exc.value.detail.lower()

@@ -34,9 +34,16 @@ def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdm
             # Strict mode: also check allocated
             is_quota_exceeded = True
 
+    is_allocation_limit_reached = bool(
+        s.traffic_limit is not None
+        and not s.oversell_allowed
+        and allocated >= s.traffic_limit
+    )
+
     if admin.is_sudo:
         is_user_limit_exceeded = False
         is_quota_exceeded = False
+        is_allocation_limit_reached = False
 
     return MarzyarAdminSettingsResponse(
         admin_id=admin.id,
@@ -52,6 +59,7 @@ def _build_admin_settings_response(db: Session, admin: AdminModel) -> MarzyarAdm
         current_consumed_traffic=consumed,
         is_quota_exceeded=is_quota_exceeded,
         is_user_limit_exceeded=is_user_limit_exceeded,
+        is_allocation_limit_reached=is_allocation_limit_reached,
         locked_users_count=locked_count,
     )
 
@@ -157,9 +165,16 @@ def get_my_limits(
             # Strict mode: also check allocated
             is_quota_exceeded = True
 
+    is_allocation_limit_reached = bool(
+        s.traffic_limit is not None
+        and not s.oversell_allowed
+        and allocated >= s.traffic_limit
+    )
+
     if current_admin.is_sudo:
         is_user_limit_exceeded = False
         is_quota_exceeded = False
+        is_allocation_limit_reached = False
 
     return MarzyarMyLimitsResponse(
         username=current_admin.username,
@@ -173,6 +188,7 @@ def get_my_limits(
         current_consumed_traffic=consumed,
         is_quota_exceeded=is_quota_exceeded,
         is_user_limit_exceeded=is_user_limit_exceeded,
+        is_allocation_limit_reached=is_allocation_limit_reached,
         locked_users_count=locked_count,
     )
 

@@ -38,6 +38,7 @@ class MarzyarAdminSettingsResponse(BaseModel):
     current_consumed_traffic: int = 0
     is_quota_exceeded: bool = False
     is_user_limit_exceeded: bool = False
+    is_allocation_limit_reached: bool = False
     locked_users_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
@@ -55,6 +56,7 @@ class MarzyarMyLimitsResponse(BaseModel):
     current_consumed_traffic: int = 0
     is_quota_exceeded: bool = False
     is_user_limit_exceeded: bool = False
+    is_allocation_limit_reached: bool = False
     locked_users_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)

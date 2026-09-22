@@ -386,5 +386,13 @@
   "marzyar.lockedUsersBanner": "Traffic quota exceeded! Your active users are locked and detached from proxy.",
   "marzyar.usersLocked": "{{count}} users locked and disconnected from proxy.",
   "marzyar.createUserQuotaExceeded": "Cannot create user: Admin traffic quota is exceeded",
-  "marzyar.createUserLimitExceeded": "Cannot create user: Admin accounts limit is reached"
+  "marzyar.createUserLimitExceeded": "Cannot create user: Admin accounts limit is reached",
+  "marzyar.createUserAllocationExceeded": "Cannot create user: Total data allocation cap reached (strict mode active)",
+  "marzyar.strictAllocationExceeded": "Data Allocation Limit Exceeded",
+  "marzyar.strictAllocationExceededDesc": "Total data allocation cap reached. Cannot create user because total allocated limits would exceed your quota.",
+  "marzyar.unlimitedNotAllowed": "Data Limit Required",
+  "marzyar.unlimitedNotAllowedStrict": "Cannot create user with unlimited data. Overselling is disabled for your account; please specify a data limit.",
+  "marzyar.allocationCapRemaining": "Strict allocation cap: {{remaining}} remaining out of {{total}}",
+  "marzyar.noRemainingAllocation": "Total data allocation cap is reached (0 GB remaining). Cannot allocate data to new users unless existing users' data limits are reduced or quota is renewed.",
+  "marzyar.exceedsAllocationCap": "Data limit of {{requested}} GB exceeds your remaining data allocation cap of {{remaining}} GB (Total quota: {{total}})."
 }

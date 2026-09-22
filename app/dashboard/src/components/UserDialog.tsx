@@ -74,6 +74,7 @@ import { ReloadIcon } from "./Filters";
 import { TransferOwnerModal } from "./TransferOwnerModal";
 import useGetUser from "hooks/useGetUser";
 import classNames from "classnames";
+import { useMarzyarMyLimitsQuery } from "contexts/MarzyarContext";
 
 const AddUserIcon = chakra(UserPlusIcon, {
   baseStyle: {
@@ -249,6 +250,28 @@ export const UserDialog: FC<UserDialogProps> = () => {
   const { colorMode } = useColorMode();
   const { userData } = useGetUser();
   const isSudo = userData?.is_sudo;
+  const { data: myLimits } = useMarzyarMyLimitsQuery(!isSudo);
+
+  const isStrictCap =
+    !isSudo &&
+    Boolean(
+      myLimits &&
+        !myLimits.oversell_allowed &&
+        myLimits.traffic_limit !== null &&
+        myLimits.traffic_limit !== undefined
+    );
+  const currentAllocated = myLimits?.current_allocated_traffic ?? 0;
+  const trafficLimit = myLimits?.traffic_limit ?? 0;
+  const editingUserLimit =
+    isEditing && editingUser?.data_limit ? editingUser.data_limit : 0;
+  const remainingAllocatableBytes = isStrictCap
+    ? Math.max(0, trafficLimit - currentAllocated + editingUserLimit)
+    : null;
+  const remainingAllocatableGB =
+    remainingAllocatableBytes !== null
+      ? Math.round((remainingAllocatableBytes / 1073741824) * 100) / 100
+      : null;
+
   const [isTransferOpen, setIsTransferOpen] = useState(false);
 
   const [usageVisible, setUsageVisible] = useState(false);
@@ -390,6 +413,55 @@ export const UserDialog: FC<UserDialogProps> = () => {
           : "active",
     };
 
+    if (isStrictCap && remainingAllocatableBytes !== null) {
+      if (!values.data_limit || values.data_limit <= 0) {
+        const msg = t(
+          "marzyar.unlimitedNotAllowedStrict",
+          "Cannot create user with unlimited data. Overselling is disabled for your account; please specify a data limit."
+        );
+        form.setError("data_limit", { type: "custom", message: msg });
+        setError(msg);
+        toast({
+          title: t("marzyar.unlimitedNotAllowed", "Data Limit Required"),
+          description: msg,
+          status: "error",
+          position: "top",
+          duration: 6000,
+          isClosable: true,
+        });
+        setLoading(false);
+        return;
+      }
+      if (values.data_limit > remainingAllocatableBytes) {
+        const requestedGB =
+          Math.round((values.data_limit / 1073741824) * 100) / 100;
+        const msg = t(
+          "marzyar.exceedsAllocationCap",
+          "Data limit of {{requested}} GB exceeds your remaining data allocation cap of {{remaining}} GB (Total quota: {{total}}).",
+          {
+            requested: requestedGB,
+            remaining: remainingAllocatableGB,
+            total: formatBytes(trafficLimit),
+          }
+        );
+        form.setError("data_limit", { type: "custom", message: msg });
+        setError(msg);
+        toast({
+          title: t(
+            "marzyar.strictAllocationExceeded",
+            "Data Allocation Limit Exceeded"
+          ),
+          description: msg,
+          status: "error",
+          position: "top",
+          duration: 7000,
+          isClosable: true,
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
     methods[method](body)
       .then(() => {
         toast({
@@ -405,18 +477,126 @@ export const UserDialog: FC<UserDialogProps> = () => {
         onClose();
       })
       .catch((err) => {
-        if (err?.response?.status === 409 || err?.response?.status === 400)
-          setError(err?.response?._data?.detail);
-        if (err?.response?.status === 422) {
-          Object.keys(err.response._data.detail).forEach((key) => {
-            setError(err?.response._data.detail[key] as string);
+        const status = err?.response?.status || err?.status;
+        const rawDetail =
+          err?.response?._data?.detail || err?.data?.detail || err?.message;
+        const detail = typeof rawDetail === "string" ? rawDetail : "";
+
+        if (status === 409) {
+          const msg = detail || t("userDialog.userExists", "User already exists");
+          setError(msg);
+          form.setError("username", {
+            type: "custom",
+            message: msg,
+          });
+        } else if (
+          status === 422 &&
+          typeof rawDetail === "object" &&
+          rawDetail !== null
+        ) {
+          Object.keys(rawDetail).forEach((key) => {
+            setError(rawDetail[key] as string);
             form.setError(
               key as "proxies" | "username" | "data_limit" | "expire",
               {
                 type: "custom",
-                message: err.response._data.detail[key],
+                message: rawDetail[key],
               }
             );
+          });
+        } else if (status === 403 || status === 400) {
+          const detailLower = detail.toLowerCase();
+          const isAllocationCap =
+            detailLower.includes("allocated") ||
+            (detailLower.includes("oversell") && detailLower.includes("quota")) ||
+            detailLower.includes("exceed your limit") ||
+            detailLower.includes("exceeds limit");
+          const isUnlimitedDisallowed =
+            detailLower.includes("unlimited data") &&
+            detailLower.includes("oversell");
+          const isUserLimit =
+            detailLower.includes("user limit") ||
+            detailLower.includes("cannot create more users");
+
+          let errorMessage = detail;
+          let toastTitle = t("error", "Error");
+
+          if (isAllocationCap) {
+            errorMessage =
+              detail ||
+              t(
+                "marzyar.strictAllocationExceededDesc",
+                "Total data allocation cap reached. Cannot create user because total allocated limits would exceed your quota."
+              );
+            toastTitle = t(
+              "marzyar.strictAllocationExceeded",
+              "Data Allocation Limit Exceeded"
+            );
+            form.setError("data_limit", {
+              type: "custom",
+              message: errorMessage,
+            });
+          } else if (isUnlimitedDisallowed) {
+            errorMessage =
+              detail ||
+              t(
+                "marzyar.unlimitedNotAllowedStrict",
+                "Cannot create user with unlimited data. Overselling is disabled for your account; please specify a data limit."
+              );
+            toastTitle = t(
+              "marzyar.unlimitedNotAllowed",
+              "Data Limit Required"
+            );
+            form.setError("data_limit", {
+              type: "custom",
+              message: errorMessage,
+            });
+          } else if (isUserLimit) {
+            errorMessage =
+              detail ||
+              t(
+                "marzyar.createUserLimitExceeded",
+                "Cannot create user: Admin accounts limit is reached"
+              );
+            toastTitle = t("marzyar.limitReached", "Limit Reached");
+            form.setError("username", {
+              type: "custom",
+              message: errorMessage,
+            });
+          } else if (
+            detailLower.includes("quota exceeded") ||
+            detailLower.includes("quota is currently exhausted")
+          ) {
+            errorMessage =
+              detail ||
+              t(
+                "marzyar.createUserQuotaExceeded",
+                "Cannot create user: Admin traffic quota is exceeded"
+              );
+            toastTitle = t("marzyar.quotaExceeded", "Quota Exceeded");
+          }
+
+          setError(errorMessage);
+
+          toast({
+            title: toastTitle,
+            description: errorMessage,
+            status: "error",
+            position: "top",
+            duration: 7000,
+            isClosable: true,
+          });
+        } else {
+          const fallback =
+            detail || t("somethingWentWrong", "Something went wrong");
+          setError(fallback);
+          toast({
+            title: t("error", "Error"),
+            description: fallback,
+            status: "error",
+            position: "top",
+            duration: 5000,
+            isClosable: true,
           });
         }
       })
@@ -485,6 +665,27 @@ export const UserDialog: FC<UserDialogProps> = () => {
             </ModalHeader>
             <ModalCloseButton mt={3} disabled={disabled} />
             <ModalBody>
+              {isStrictCap &&
+                remainingAllocatableBytes !== null &&
+                remainingAllocatableBytes <= 0 && (
+                  <Alert status="error" borderRadius="md" mb={3} fontSize="xs">
+                    <AlertIcon />
+                    <Box>
+                      <Text fontWeight="bold">
+                        {t(
+                          "marzyar.strictAllocationExceeded",
+                          "Data Allocation Limit Exceeded"
+                        )}
+                      </Text>
+                      <Text>
+                        {t(
+                          "marzyar.noRemainingAllocation",
+                          "Total data allocation cap is reached (0 GB remaining). Cannot allocate data to new users unless existing users' data limits are reduced or quota is renewed."
+                        )}
+                      </Text>
+                    </Box>
+                  </Alert>
+                )}
               <Grid
                 templateColumns={{
                   base: "repeat(1, 1fr)",
@@ -660,6 +861,28 @@ export const UserDialog: FC<UserDialogProps> = () => {
                             );
                           }}
                         />
+                        {isStrictCap && remainingAllocatableBytes !== null && (
+                          <FormHelperText
+                            fontSize="xs"
+                            mt={1}
+                            color={
+                              remainingAllocatableBytes <= 0
+                                ? "red.500"
+                                : "purple.500"
+                            }
+                          >
+                            {remainingAllocatableBytes <= 0
+                              ? t(
+                                  "marzyar.noRemainingAllocation",
+                                  "Total data allocation cap is reached (0 GB remaining). Cannot allocate data to new users unless existing users' data limits are reduced or quota is renewed."
+                                )
+                              : t("marzyar.allocationCapRemaining", {
+                                  remaining: `${remainingAllocatableGB} GB`,
+                                  total: formatBytes(trafficLimit),
+                                  defaultValue: `Strict allocation cap: ${remainingAllocatableGB} GB remaining out of ${formatBytes(trafficLimit)}`,
+                                })}
+                          </FormHelperText>
+                        )}
                       </FormControl>
                       <Collapse
                         in={!!(dataLimit && dataLimit > 0)}

@@ -360,5 +360,13 @@
   "marzyar.lockedUsersBanner": "流量配额已超限！活跃用户已锁定并从代理断开。",
   "marzyar.usersLocked": "{{count}} 个用户已被锁定。",
   "marzyar.createUserQuotaExceeded": "无法创建用户：管理员流量配额已超限",
-  "marzyar.createUserLimitExceeded": "无法创建用户：管理员用户数量已达上限"
+  "marzyar.createUserLimitExceeded": "无法创建用户：管理员用户数量已达上限",
+  "marzyar.createUserAllocationExceeded": "无法创建用户：已达到总流量分配上限（严格模式已启用）",
+  "marzyar.strictAllocationExceeded": "超出流量分配上限",
+  "marzyar.strictAllocationExceededDesc": "总流量分配已达上限。无法创建用户，因为分配的额度总和将超出您的配额。",
+  "marzyar.unlimitedNotAllowed": "需要指定流量上限",
+  "marzyar.unlimitedNotAllowedStrict": "无法创建无限制流量的用户。您的账户已禁用超售，请指定流量额度。",
+  "marzyar.allocationCapRemaining": "严格分配上限：剩余 {{remaining}} / 总计 {{total}}",
+  "marzyar.noRemainingAllocation": "总流量分配上限已达满额（剩余 0 GB）。除非降低现有用户的流量上限或增加配额，否则无法向新用户分配流量。",
+  "marzyar.exceedsAllocationCap": "所设流量额度 {{requested}} GB 超出了您剩余的可分配上限 {{remaining}} GB（总配额：{{total}}）。"
 }

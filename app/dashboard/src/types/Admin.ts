@@ -72,5 +72,6 @@ export interface MarzyarMyLimits {
   current_consumed_traffic: number;
   is_quota_exceeded: boolean;
   is_user_limit_exceeded: boolean;
+  is_allocation_limit_reached?: boolean;
   locked_users_count: number;
 }
