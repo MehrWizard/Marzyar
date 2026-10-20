@@ -101,6 +101,188 @@ marzban update
 
 ---
 
+## Документация API Marzyar
+
+В дополнение к стандартным API Marzban, Marzyar предоставляет набор REST эндпоинтов с префиксом `/api/marzyar` для программного управления квотами реселлеров, лимитами пользователей, оверселлингом, разрешенными инбаундами и заблокированными пользователями.
+
+Интерактивная документация Swagger/OpenAPI доступна по адресу `/docs` (если включена переменная `DOCS=true`).
+
+### Аутентификация
+Для всех эндпоинтов Marzyar требуется стандартная Bearer-аутентификация Marzban. Передавайте токен доступа в заголовке `Authorization`:
+```http
+Authorization: Bearer <access_token>
+```
+Получение токена доступа:
+```bash
+curl -X POST "https://your-panel-domain:8000/api/admin/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=yourpassword"
+```
+
+---
+
+### Список эндпоинтов
+
+| Метод | Эндпоинт | Доступ | Описание |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/marzyar/admins` | Только Sudo | Список настроек, лимитов, квот и заблокированных пользователей всех админов |
+| `GET` | `/api/marzyar/admin/{admin_identifier}/settings` | Только Sudo | Настройки и статистика использования конкретного реселлера |
+| `PUT` | `/api/marzyar/admin/{admin_identifier}/settings` | Только Sudo | Изменение лимитов пользователей, квоты трафика, оверселлинга и инбаундов |
+| `POST` | `/api/marzyar/admin/{admin_identifier}/reset_quota` | Только Sudo | Сброс счетчика потребления квоты реселлера и разблокировка пользователей |
+| `GET` | `/api/marzyar/my_limits` | Все админы | Текущие лимиты и остаток квоты авторизованного администратора |
+| `GET` | `/api/marzyar/locked_users` | Все админы | Список заблокированных из-за исчерпания квоты пользователей |
+
+---
+
+### 1. Список настроек и квот всех администраторов
+- **Эндпоинт**: `GET /api/marzyar/admins`
+- **Доступ**: Только суперпользователь (Sudo).
+- **Описание**: Возвращает список всех администраторов с их лимитами, выделенным трафиком, фактическим потреблением и количеством заблокированных пользователей.
+
+#### Пример запроса
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/admins" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Пример ответа (`200 OK`)
+```json
+[
+  {
+    "admin_id": 2,
+    "username": "reseller1",
+    "is_sudo": false,
+    "users_limit": 50,
+    "traffic_limit": 107374182400,
+    "oversell_allowed": false,
+    "allowed_inbounds": ["VLESS TCP REALITY", "VMess TCP"],
+    "quota_used_traffic": 15000000000,
+    "current_users_count": 12,
+    "current_allocated_traffic": 64424509440,
+    "current_consumed_traffic": 21474836480,
+    "is_quota_exceeded": false,
+    "is_user_limit_exceeded": false,
+    "is_allocation_limit_reached": false,
+    "locked_users_count": 0
+  }
+]
+```
+
+---
+
+### 2. Получить настройки конкретного администратора
+- **Эндпоинт**: `GET /api/marzyar/admin/{admin_identifier}/settings`
+- **Доступ**: Только суперпользователь (Sudo).
+- **Параметр пути**: `admin_identifier` (числовой ID или логин администратора).
+- **Ответ**: Объект `MarzyarAdminSettingsResponse`; `404 Not Found` если администратор не найден.
+
+#### Пример запроса
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### 3. Обновить настройки и лимиты реселлера
+- **Эндпоинт**: `PUT /api/marzyar/admin/{admin_identifier}/settings`
+- **Доступ**: Только суперпользователь (Sudo).
+- **Тело запроса (JSON)**:
+  | Поле | Тип | Обязательно | Описание |
+  | :--- | :--- | :--- | :--- |
+  | `users_limit` | целое число или `null` | Нет | Максимальное количество пользователей (`null` — без ограничений). |
+  | `traffic_limit` | целое число или `null` | Нет | Квота трафика в **байтах** (`null` — без ограничений). Пример: `107374182400` (100 ГБ). |
+  | `oversell_allowed` | boolean | Нет | `false` = Строгий режим (сумма тарифов ограничена `traffic_limit`); `true` = Оверселлинг (учитывается фактический трафик). |
+  | `allowed_inbounds` | массив строк или `null` | Нет | Разрешенные теги инбаундов (`null` — все инбаунды разрешены). |
+
+> **Примечание**: Изменение настроек немедленно запускает перепроверку: при увеличении квоты заблокированные пользователи сразу восстанавливаются в Xray.
+
+#### Пример запроса
+```bash
+curl -X PUT "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "users_limit": 100,
+    "traffic_limit": 214748364800,
+    "oversell_allowed": true,
+    "allowed_inbounds": ["VLESS TCP REALITY"]
+  }'
+```
+
+---
+
+### 4. Сброс квоты потребления трафика
+- **Эндпоинт**: `POST /api/marzyar/admin/{admin_identifier}/reset_quota`
+- **Доступ**: Только суперпользователь (Sudo).
+- **Описание**: Обнуляет счетчик потребленного трафика реселлера и немедленно разблокирует всех его пользователей в Xray.
+
+#### Пример запроса
+```bash
+curl -X POST "https://your-panel-domain:8000/api/marzyar/admin/reseller1/reset_quota" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### 5. Получить свои лимиты (Self-Service)
+- **Эндпоинт**: `GET /api/marzyar/my_limits`
+- **Доступ**: Любой авторизованный администратор.
+- **Описание**: Возвращает собственные лимиты, остаток квоты, количество пользователей и разрешенные инбаунды для текущего реселлера.
+
+#### Пример запроса
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/my_limits" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Пример ответа (`200 OK`)
+```json
+{
+  "username": "reseller1",
+  "is_sudo": false,
+  "users_limit": 50,
+  "traffic_limit": 107374182400,
+  "oversell_allowed": false,
+  "allowed_inbounds": ["VLESS TCP REALITY"],
+  "current_users_count": 12,
+  "current_allocated_traffic": 64424509440,
+  "current_consumed_traffic": 21474836480,
+  "is_quota_exceeded": false,
+  "is_user_limit_exceeded": false,
+  "is_allocation_limit_reached": false,
+  "locked_users_count": 0
+}
+```
+
+---
+
+### 6. Список заблокированных пользователей
+- **Эндпоинт**: `GET /api/marzyar/locked_users`
+- **Доступ**: Любой авторизованный администратор (Sudo видит всех пользователей; реселлер — только своих).
+- **Описание**: Возвращает список пользователей, временно заблокированных из-за превышения квоты реселлера.
+
+#### Пример запроса
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/locked_users" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### Пример ответа (`200 OK`)
+```json
+[
+  {
+    "user_id": 42,
+    "username": "client_alice",
+    "admin_username": "reseller1",
+    "locked_at": "2026-10-20T14:30:00",
+    "lock_reason": "Admin quota exceeded"
+  }
+]
+```
+
+---
+
 ## Пожертвование (Donation)
 
 Если вы находите Marzyar полезным:

@@ -101,6 +101,191 @@ marzban update
 
 ---
 
+## Marzyar API 接口文档
+
+除 Marzban 原生 API 外，Marzyar 提供了一组以 `/api/marzyar` 为前缀的专属 REST 接口，用于通过程序化方式管理分销商流量配额、用户配额上限、超售控制、允许的入站协议以及被锁定的用户。
+
+交互式 Swagger/OpenAPI 文档可在面板的 `/docs` 路径直接在线查看与调试（需配置 `DOCS=true`）。
+
+### 身份验证 (Authentication)
+所有 Marzyar 接口均需要标准 Marzban OAuth2 Bearer 认证。请在 HTTP 请求头中携带 `Authorization`：
+```http
+Authorization: Bearer <access_token>
+```
+获取访问令牌：
+```bash
+curl -X POST "https://your-panel-domain:8000/api/admin/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=yourpassword"
+```
+
+---
+
+### 接口概览
+
+| 请求方式 | 接口路径 (Endpoint) | 权限要求 | 接口说明 |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/marzyar/admins` | 仅限超级管理员 (Sudo) | 获取所有管理员的配额设置、已分配流量、实际消耗及锁定状态 |
+| `GET` | `/api/marzyar/admin/{admin_identifier}/settings` | 仅限超级管理员 (Sudo) | 获取指定分销商管理员的配置与实时使用统计 |
+| `PUT` | `/api/marzyar/admin/{admin_identifier}/settings` | 仅限超级管理员 (Sudo) | 修改分销商用户数上限、流量配额、超售模式及允许的入站协议 |
+| `POST` | `/api/marzyar/admin/{admin_identifier}/reset_quota` | 仅限超级管理员 (Sudo) | 重置分销商已消耗的流量计数器并实时解锁其所有用户 |
+| `GET` | `/api/marzyar/my_limits` | 所有已登录管理员 | 查询当前登录管理员自身的配额限制、剩余流量及可用协议 |
+| `GET` | `/api/marzyar/locked_users` | 所有已登录管理员 | 查询因配额超限而被锁定的用户列表及锁定原因 |
+
+---
+
+### 1. 获取所有管理员的设置与配额
+- **接口路径**: `GET /api/marzyar/admins`
+- **权限要求**: 仅限超级管理员 (Sudo)。
+- **说明**: 返回所有管理员的配置信息，包括用户上限、流量配额限制、已分配总流量、已消耗总流量以及锁定用户数。
+
+#### 请求示例
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/admins" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### 响应示例 (`200 OK`)
+```json
+[
+  {
+    "admin_id": 2,
+    "username": "reseller1",
+    "is_sudo": false,
+    "users_limit": 50,
+    "traffic_limit": 107374182400,
+    "oversell_allowed": false,
+    "allowed_inbounds": ["VLESS TCP REALITY", "VMess TCP"],
+    "quota_used_traffic": 15000000000,
+    "current_users_count": 12,
+    "current_allocated_traffic": 64424509440,
+    "current_consumed_traffic": 21474836480,
+    "is_quota_exceeded": false,
+    "is_user_limit_exceeded": false,
+    "is_allocation_limit_reached": false,
+    "locked_users_count": 0
+  }
+]
+```
+
+---
+
+### 2. 获取指定管理员的设置
+- **接口路径**: `GET /api/marzyar/admin/{admin_identifier}/settings`
+- **权限要求**: 仅限超级管理员 (Sudo)。
+- **路径参数**: `admin_identifier` (管理员数字 ID 如 `2` 或用户名如 `reseller1`)。
+- **响应**: `MarzyarAdminSettingsResponse` 对象；若管理员不存在则返回 `404 Not Found`。
+
+#### 请求示例
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### 3. 修改分销商设置与配额
+- **接口路径**: `PUT /api/marzyar/admin/{admin_identifier}/settings`
+- **权限要求**: 仅限超级管理员 (Sudo)。
+- **路径参数**: 管理员数字 ID 或用户名。
+- **请求体 (JSON)**:
+  | 字段 | 类型 | 必填 | 说明 |
+  | :--- | :--- | :--- | :--- |
+  | `users_limit` | 整数 或 `null` | 否 | 最大允许创建的用户数（`null` 表示不限制）。 |
+  | `traffic_limit` | 整数 或 `null` | 否 | 流量配额，单位为 **字节 (bytes)**（`null` 表示不限制）。例如：`107374182400` 表示 100 GB。 |
+  | `oversell_allowed` | 布尔值 | 否 | `false` = 严格模式（所有用户的额度总和不能超过 `traffic_limit`）；`true` = 超售模式（仅对实际消耗的总流量做上限控制）。 |
+  | `allowed_inbounds` | 字符串数组 或 `null` | 否 | 允许使用的入站协议标签列表（`null` 表示允许所有入站）。现有用户将被自动同步限制在指定入站内。 |
+
+> **提示**: 更改设置后系统将立即重新审计配额：若调高配额或解锁限制，被锁定的用户会实时在 Xray 中恢复；若更改了允许的入站协议，也会立刻更新关联用户的入站权限。
+
+#### 请求示例
+```bash
+curl -X PUT "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "users_limit": 100,
+    "traffic_limit": 214748364800,
+    "oversell_allowed": true,
+    "allowed_inbounds": ["VLESS TCP REALITY"]
+  }'
+```
+
+---
+
+### 4. 重置分销商流量配额计数器
+- **接口路径**: `POST /api/marzyar/admin/{admin_identifier}/reset_quota`
+- **权限要求**: 仅限超级管理员 (Sudo)。
+- **说明**: 将分销商的历史消耗累计计数器归零，并立即将该分销商旗下所有被锁定的用户解锁并在 Xray 中恢复连通。
+
+#### 请求示例
+```bash
+curl -X POST "https://your-panel-domain:8000/api/marzyar/admin/reseller1/reset_quota" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### 5. 获取当前管理员自身的配额 (Self-Service)
+- **接口路径**: `GET /api/marzyar/my_limits`
+- **权限要求**: 所有已登录管理员（超级管理员与分销商均可）。
+- **说明**: 返回当前发起请求的管理员自身的配额状态、剩余名额、实际消耗与可用入站。非常适合分销商自主查询客户端或对接机器人。
+
+#### 请求示例
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/my_limits" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### 响应示例 (`200 OK`)
+```json
+{
+  "username": "reseller1",
+  "is_sudo": false,
+  "users_limit": 50,
+  "traffic_limit": 107374182400,
+  "oversell_allowed": false,
+  "allowed_inbounds": ["VLESS TCP REALITY"],
+  "current_users_count": 12,
+  "current_allocated_traffic": 64424509440,
+  "current_consumed_traffic": 21474836480,
+  "is_quota_exceeded": false,
+  "is_user_limit_exceeded": false,
+  "is_allocation_limit_reached": false,
+  "locked_users_count": 0
+}
+```
+
+---
+
+### 6. 查询被锁定的用户列表
+- **接口路径**: `GET /api/marzyar/locked_users`
+- **权限要求**: 所有已登录管理员。
+  - **超级管理员 (Sudo)**: 可查看全平台所有分销商名下被锁定的用户。
+  - **分销商管理员**: 仅能查看自己名下被锁定的用户。
+- **说明**: 列出当前因分销商配额耗尽而暂时断开 Xray 连接的用户，包含锁定时间与原因。
+
+#### 请求示例
+```bash
+curl -X GET "https://your-panel-domain:8000/api/marzyar/locked_users" \
+  -H "Authorization: Bearer <token>"
+```
+
+#### 响应示例 (`200 OK`)
+```json
+[
+  {
+    "user_id": 42,
+    "username": "client_alice",
+    "admin_username": "reseller1",
+    "locked_at": "2026-10-20T14:30:00",
+    "lock_reason": "Admin quota exceeded"
+  }
+]
+```
+
+---
+
 ## 赞助支持 (Donation)
 
 如果您觉得 Marzyar 对您有所帮助：
