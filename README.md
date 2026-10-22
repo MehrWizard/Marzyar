@@ -53,9 +53,9 @@
 
 **Marzyar** is the reseller-ready evolution of **Marzdar** and **Marzban**.
 
-While **Marzdar** focuses on completing the missing user interface elements of upstream Marzban, **Marzyar** integrates native reseller management capabilities directly into the core engine while guaranteeing **zero database schema disruption** and **100% bidirectional migration safety**:
+It combines all completed web UI features of **Marzdar** with native, non-bypassable reseller management and high-performance Rust networking, guaranteeing **zero database schema disruption** and **100% bidirectional migration safety**:
 
-1. **User Account Limits**: Cap the number of user accounts a reseller admin can create.
+1. **User Account Limits**: Cap the number of user accounts each reseller admin can create.
 2. **Bandwidth Quotas & Oversell Controls**:
    - **Unified Consumed Limit**: In *all* modes, total consumed bandwidth (`∑ active_usage + historical_resets_and_deletions`) can never exceed the admin's `traffic_limit`.
    - **Strict Mode (No Oversell)**: *Additionally* limits the sum of allocated user data limits (`∑ user.data_limit ≤ traffic_limit`). Resellers cannot over-allocate or create accounts with unlimited bandwidth.
@@ -67,6 +67,7 @@ While **Marzdar** focuses on completing the missing user interface elements of u
    - When Sudo resets or increases the reseller's quota, all locked users are automatically unlocked and restored to Xray in real-time.
 4. **Allowed Inbounds**: Restrict each reseller to specific protocols and inbounds (e.g., VMess TCP only).
 5. **Dashboard Header Reseller Widget**: Compact live indicators displaying remaining slots and quota for logged-in reseller admins.
+6. **High-Performance Rust Web Engine & Caching**: Powered by Granian (Tokio runtime) with thread-safe in-memory subscription caching and composite database indexes for ultra-low latency response times.
 
 ---
 
@@ -107,8 +108,6 @@ curl -X POST "https://your-panel-domain:8000/api/admin/token" \
   -d "username=admin&password=yourpassword"
 ```
 
----
-
 ### Endpoint Summary
 
 | Method | Endpoint | Permission | Description |
@@ -120,182 +119,7 @@ curl -X POST "https://your-panel-domain:8000/api/admin/token" \
 | `GET` | `/api/marzyar/my_limits` | All Admins | Retrieve the currently logged-in admin's own limits and quota status |
 | `GET` | `/api/marzyar/locked_users` | All Admins | List currently locked users with lock reasons and timestamps |
 
----
-
-### 1. List All Admins' Settings & Quotas
-- **Endpoint**: `GET /api/marzyar/admins`
-- **Permission**: Sudo Admin only (`403 Forbidden` if non-sudo).
-- **Description**: Returns an array containing the configuration, real-time user counts, allocated bandwidth, cumulative consumed bandwidth, and lock states for every admin.
-
-#### Example Request
-```bash
-curl -X GET "https://your-panel-domain:8000/api/marzyar/admins" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Example Response (`200 OK`)
-```json
-[
-  {
-    "admin_id": 2,
-    "username": "reseller1",
-    "is_sudo": false,
-    "users_limit": 50,
-    "traffic_limit": 107374182400,
-    "oversell_allowed": false,
-    "allowed_inbounds": ["VLESS TCP REALITY", "VMess TCP"],
-    "quota_used_traffic": 15000000000,
-    "current_users_count": 12,
-    "current_allocated_traffic": 64424509440,
-    "current_consumed_traffic": 21474836480,
-    "is_quota_exceeded": false,
-    "is_user_limit_exceeded": false,
-    "is_allocation_limit_reached": false,
-    "locked_users_count": 0
-  }
-]
-```
-
----
-
-### 2. Get Specific Admin Settings
-- **Endpoint**: `GET /api/marzyar/admin/{admin_identifier}/settings`
-- **Permission**: Sudo Admin only.
-- **Path Parameters**:
-  - `admin_identifier` (integer or string): Admin numeric ID (e.g. `2`) or username (e.g. `reseller1`).
-- **Response**: `200 OK` with single `MarzyarAdminSettingsResponse` object; `404 Not Found` if admin does not exist.
-
-#### Example Request
-```bash
-curl -X GET "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
-  -H "Authorization: Bearer <token>"
-```
-
----
-
-### 3. Update Admin Settings & Limits
-- **Endpoint**: `PUT /api/marzyar/admin/{admin_identifier}/settings`
-- **Permission**: Sudo Admin only.
-- **Path Parameters**:
-  - `admin_identifier`: Admin numeric ID or username.
-- **Request Body** (`application/json`):
-  | Field | Type | Required | Description |
-  | :--- | :--- | :--- | :--- |
-  | `users_limit` | integer \| null | No | Max number of user accounts allowed (`null` for unlimited). |
-  | `traffic_limit` | integer \| null | No | Traffic quota in **bytes** (`null` for unlimited). Example: `107374182400` for 100 GB. |
-  | `oversell_allowed` | boolean | No | `false` = Strict mode (sum of allocated limits capped by `traffic_limit`); `true` = Oversell mode (only actual consumed traffic capped). |
-  | `allowed_inbounds` | array of strings \| null | No | Array of allowed inbound tags (`null` for all inbounds). Existing users are automatically restricted to this list. |
-
-> **Note**: Updating settings immediately re-audits quotas and allowed inbounds: if limits were raised, locked users are automatically unlocked in real-time; if inbounds were modified, users are re-synced in Xray immediately.
-
-#### Example Request
-```bash
-curl -X PUT "https://your-panel-domain:8000/api/marzyar/admin/reseller1/settings" \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "users_limit": 100,
-    "traffic_limit": 214748364800,
-    "oversell_allowed": true,
-    "allowed_inbounds": ["VLESS TCP REALITY"]
-  }'
-```
-
-#### Example Response (`200 OK`)
-Returns the updated `MarzyarAdminSettingsResponse`.
-
----
-
-### 4. Reset Admin Quota Counter
-- **Endpoint**: `POST /api/marzyar/admin/{admin_identifier}/reset_quota`
-- **Permission**: Sudo Admin only.
-- **Description**: Resets the reseller admin's accumulated consumption counter to zero and automatically unlocks and restores all of their locked users in Xray in real-time.
-
-#### Example Request
-```bash
-curl -X POST "https://your-panel-domain:8000/api/marzyar/admin/reseller1/reset_quota" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Example Response (`200 OK`)
-Returns the updated `MarzyarAdminSettingsResponse` with `current_consumed_traffic` reset and `locked_users_count: 0`.
-
----
-
-### 5. Get Current Admin's Limits (Self-Service)
-- **Endpoint**: `GET /api/marzyar/my_limits`
-- **Permission**: Any authenticated admin (Sudo or Reseller).
-- **Description**: Returns the calling admin's own user slot limits, quota consumption, allocated traffic, oversell setting, allowed inbounds, and whether any limits have been reached. Ideal for reseller client apps and bots.
-
-#### Example Request
-```bash
-curl -X GET "https://your-panel-domain:8000/api/marzyar/my_limits" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Example Response (`200 OK`)
-```json
-{
-  "username": "reseller1",
-  "is_sudo": false,
-  "users_limit": 50,
-  "traffic_limit": 107374182400,
-  "oversell_allowed": false,
-  "allowed_inbounds": ["VLESS TCP REALITY"],
-  "current_users_count": 12,
-  "current_allocated_traffic": 64424509440,
-  "current_consumed_traffic": 21474836480,
-  "is_quota_exceeded": false,
-  "is_user_limit_exceeded": false,
-  "is_allocation_limit_reached": false,
-  "locked_users_count": 0
-}
-```
-
----
-
-### 6. List Locked Users
-- **Endpoint**: `GET /api/marzyar/locked_users`
-- **Permission**: Any authenticated admin.
-  - **Sudo Admin**: Views all locked users across all reseller accounts.
-  - **Reseller Admin**: Views only locked users created by their own account.
-- **Description**: Lists all user accounts temporarily locked and detached from Xray due to admin quota exhaustion, along with lock timestamps and reasons.
-
-#### Example Request
-```bash
-curl -X GET "https://your-panel-domain:8000/api/marzyar/locked_users" \
-  -H "Authorization: Bearer <token>"
-```
-
-#### Example Response (`200 OK`)
-```json
-[
-  {
-    "user_id": 42,
-    "username": "client_alice",
-    "admin_username": "reseller1",
-    "locked_at": "2026-10-20T14:30:00",
-    "lock_reason": "Admin quota exceeded"
-  }
-]
-```
-
----
-
-## Feature Comparison
-
-| Feature | Marzban (Upstream) | Marzdar | Marzyar |
-| :--- | :--- | :--- | :--- |
-| **Compatibility** | Upstream | 100% Drop-in | 100% Drop-in (Zero DB alterations) |
-| **Complete Web UI** | ❌ (CLI/API only for many features) | ✅ Complete | ✅ Complete |
-| **ASGI Web Engine** | Uvicorn (Python) | ⚡ **Granian (Rust/Tokio) + Uvicorn fallback** | ⚡ **Granian (Rust/Tokio) + Uvicorn fallback** |
-| **Subscription Caching** | ❌ None (recomputed per poll) | ⚡ **In-Memory Thread-Safe TTL Cache** | ⚡ **In-Memory Thread-Safe TTL Cache** |
-| **Database Indexing** | Standard | ⚡ **Strategic Composite Indexes** | ⚡ **Strategic Composite Indexes** |
-| **Reseller User Limits** | ❌ None | ❌ None | ✅ Native & UI-managed |
-| **Bandwidth Quota & Oversell** | ❌ None | ❌ None | ✅ Native & Non-bypassable |
-| **Auto-Lock on Over-Quota** | ❌ None | ❌ None | ✅ Real-time Xray detach/restore |
-| **Allowed Inbounds Filtering**| ❌ None | ❌ None | ✅ Admin-level restriction |
-| **Bidirectional Rollback** | Baseline | ✅ Safe | ✅ 100% Safe (No custom Alembic revisions) |
+👉 For full request/response schemas, JSON payloads, and curl examples, see the [Marzyar API Reference](docs/api.md).
 
 ---
 
@@ -319,18 +143,14 @@ Both **Marzdar** and **Marzyar** incorporate high-performance architectural opti
 - 🗄️ **31.7% Lower Database Load**: MySQL peak CPU spikes reduced from 53.62% down to 36.64% under active query traffic thanks to in-memory caching and compound indexes.
 - 🛡️ **25.6% Tail Spike Suppression**: Maximum latency spike suppressed from 604.36 ms down to 449.63 ms under continuous saturation.
 
----
-
-### Detailed Benchmark Reports
-
-<details open>
-<summary><b>1. Subscription Response Latency (8.6x Faster Median)</b></summary>
-
 <p align="center">
-  <img src="docs/assets/benchmark-latency.png" alt="Subscription Response Latency Benchmark" width="850" height="auto">
+  <img src="docs/assets/benchmark.png" alt="Comprehensive Benchmark Dashboard" width="900" height="auto">
 </p>
 
-Measured across high-frequency production telemetry on a live production server under active user traffic and continuous query load:
+<details>
+<summary><b>Detailed Metrics & Percentile Tables</b></summary>
+
+#### 1. Subscription Response Latency (Live Production Telemetry)
 
 | Latency Percentile | Marzban (Original / Baseline) | Marzdar & Marzyar (Optimized) | Improvement |
 | :--- | :--- | :--- | :--- |
@@ -340,47 +160,15 @@ Measured across high-frequency production telemetry on a live production server 
 | **p95** | **93.08 ms** | **23.35 ms** | **-74.9% (4.0x faster)** |
 | **Mean (Average)** | **53.38 ms** | **12.25 ms** | **-77.1% (4.4x faster)** |
 
-```
-Subscription Latency Percentiles (Lower is better):
-
-p50 Median:
-  Marzban:            ████████████████████████ 46.27 ms
-  Marzdar & Marzyar:  ███ 5.37 ms (-88.4%)
-
-p95 Tail:
-  Marzban:            ██████████████████████████████████████████████ 93.08 ms
-  Marzdar & Marzyar:  ████████████ 23.35 ms (-74.9%)
-
-Mean Latency:
-  Marzban:            ███████████████████████████ 53.38 ms
-  Marzdar & Marzyar:  ██████ 12.25 ms (-77.1%)
-```
-</details>
-
-<details>
-<summary><b>2. Production Stability & Resource Efficiency</b></summary>
-
-<p align="center">
-  <img src="docs/assets/benchmark-stability.png" alt="Production Stability & CPU Benchmark" width="850" height="auto">
-</p>
-
-Continuous metrics recorded under active live production load:
+#### 2. Production Stability & Resource Efficiency
 
 | Telemetry Metric | Marzban (Original / Baseline) | Marzdar & Marzyar (Optimized) | Impact |
 | :--- | :--- | :--- | :--- |
 | **Peak MySQL CPU Spike** | 53.62% | **36.64%** | **31.7% lower DB query burden** |
 | **Max Tail Latency Spike** | 604.36 ms | **449.63 ms** | **25.6% lower tail spike** |
 | **Panel Memory Footprint** | ~125 MB | ~175 MB | Highly efficient bounded memory cache |
-</details>
 
-<details>
-<summary><b>3. High-Concurrency Stress & Cache Saturation Benchmark (23.3x Throughput)</b></summary>
-
-<p align="center">
-  <img src="docs/assets/benchmark-stress.png" alt="High Concurrency Stress Benchmark" width="850" height="auto">
-</p>
-
-Standardized burst test evaluating subscription endpoint capacity under sustained concurrency with in-memory caching (15 worker threads, 10 seconds continuous load):
+#### 3. High-Concurrency Stress & Cache Saturation (15 Workers, 10s Burst)
 
 | Benchmark Metric | Marzban (Baseline: Uvicorn / No Cache) | Marzdar & Marzyar (Granian + Cache + Indexes) | Impact |
 | :--- | :--- | :--- | :--- |
@@ -390,24 +178,6 @@ Standardized burst test evaluating subscription endpoint capacity under sustaine
 | **p95 Latency under Load** | **695.22 ms** | **38.62 ms** | **-94.4% Latency (18.0x faster)** |
 | **p99 Latency under Load** | **767.31 ms** | **55.85 ms** | **-92.7% Latency (13.7x faster)** |
 | **Total Completed Requests (10s)**| 341 requests | **7,764 requests** | **22.8x Total Serviced Reqs** |
-
-```
-Concurrent Throughput (Higher is better):
-  Marzban:            █ 33.2 req/s
-  Marzdar & Marzyar:  ███████████████████████ 775.2 req/s (+2,235% / 23.3x)
-
-Latency Under Stress Load (Lower is better):
-  Marzban:            ████████████████████████ 447.66 ms
-  Marzdar & Marzyar:  █ 17.53 ms (-96.1% / 25.5x faster)
-```
-</details>
-
-<details>
-<summary><b>4. Comprehensive Benchmark Dashboard (Combined Overview)</b></summary>
-
-<p align="center">
-  <img src="docs/assets/benchmark.png" alt="Comprehensive Benchmark Dashboard" width="900" height="auto">
-</p>
 </details>
 
 ---
