@@ -67,7 +67,7 @@ It combines all completed web UI features of **Marzdar** with native, non-bypass
    - When Sudo resets or increases the reseller's quota, all locked users are automatically unlocked and restored to Xray in real-time.
 4. **Allowed Inbounds**: Restrict each reseller to specific protocols and inbounds (e.g., VMess TCP only).
 5. **Dashboard Header Reseller Widget**: Compact live indicators displaying remaining slots and quota for logged-in reseller admins.
-6. **High-Performance Rust Web Engine & Caching**: Powered by Granian (Tokio runtime) with thread-safe in-memory subscription caching and composite database indexes for ultra-low latency response times.
+6. **High-Performance Rust Web Engine & C-Native Database Stack**: Powered by Granian (Tokio runtime) and compiled C-native `mysqlclient` with thread-safe in-memory subscription caching and composite database indexes for ultra-low latency response times.
 
 ---
 
@@ -130,7 +130,8 @@ Both **Marzdar** and **Marzyar** incorporate high-performance architectural opti
 1. **Rust-Powered ASGI Engine ([Granian](https://github.com/emmett-framework/granian))**: Replaced standard Python Uvicorn with Granian, an ultra-fast HTTP server utilizing the Tokio runtime and PyO3 bindings for high-throughput asynchronous networking with significantly lower CPU overhead.
 2. **Subscription In-Memory Response Caching**: Subscriptions are served from a bounded thread-safe memory cache (30s TTL) with instant automated invalidation whenever a user's configuration, status, or quota changes. Bypasses repetitive template rendering, cryptographic JWT operations, and redundant MySQL queries on continuous client polling.
 3. **Strategic Composite Database Indexing**: Added critical compound indexes on high-frequency tables (`users(online_at)`, `users(created_at)`, `node_user_usages(node_id, created_at)`, and `node_usages(node_id, created_at)`), eliminating sequential table scans and lock waits during node statistics aggregation.
-4. **Node Session Lifecycle & Stats Collection Resiliency**: Isolated node synchronization cycles, bounded gRPC timeouts, and transactional error handling ensure node stats collection never hangs or impairs API responsiveness.
+4. **C-Native Database Driver & Fast Wire Protocol Deserialization ([mysqlclient](https://github.com/PyMySQL/mysqlclient))**: Replaced interpreted pure-Python `PyMySQL` with compiled C-native `mysqlclient` (`MySQLdb`). Automatically and transparently upgrades `mysql+pymysql://` connection strings to C-extension speed without requiring `.env` changes. Delivers **2.4x faster raw wire protocol deserialization (-58.3% DBAPI latency)**, **1.64x faster bulk ORM hydration**, and **suppresses single-query tail latency spikes by 83%** (from 70 ms down to 11 ms).
+5. **Node Session Lifecycle & Stats Collection Resiliency**: Isolated node synchronization cycles, bounded gRPC timeouts, and transactional error handling ensure node stats collection never hangs or impairs API responsiveness.
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="Marzdar and Marzyar Architecture Flowchart" width="850" height="auto">
@@ -140,6 +141,7 @@ Both **Marzdar** and **Marzyar** incorporate high-performance architectural opti
 - ⚡ **8.6x Faster Median Response**: Live telemetry median (p50) subscription latency reduced from 46.27 ms down to 5.37 ms (-88.4% lower latency).
 - 🚀 **23.3x Cache Saturation Throughput**: Serviced **775.2 req/s** (7,764 requests in 10s) vs **33.2 req/s** (341 requests) under sustained 15-worker concurrency (+2,235% capacity via in-memory caching).
 - ⚡ **96.1% Lower Latency Under Load**: Average latency under sustained heavy concurrency dropped from 447.66 ms down to 17.53 ms (25.5x faster response).
+- 🗄️ **2.4x Faster SQL Wire Deserialization**: Database row unpacking dropped from 21.29 ms to 8.87 ms (-58.3% DBAPI latency) with +40.9% higher query throughput via compiled C-native `mysqlclient`.
 - 🗄️ **31.7% Lower Database Load**: MySQL peak CPU spikes reduced from 53.62% down to 36.64% under active query traffic thanks to in-memory caching and compound indexes.
 - 🛡️ **25.6% Tail Spike Suppression**: Maximum latency spike suppressed from 604.36 ms down to 449.63 ms under continuous saturation.
 
@@ -178,6 +180,16 @@ Both **Marzdar** and **Marzyar** incorporate high-performance architectural opti
 | **p95 Latency under Load** | **695.22 ms** | **38.62 ms** | **-94.4% Latency (18.0x faster)** |
 | **p99 Latency under Load** | **767.31 ms** | **55.85 ms** | **-92.7% Latency (13.7x faster)** |
 | **Total Completed Requests (10s)**| 341 requests | **7,764 requests** | **22.8x Total Serviced Reqs** |
+
+#### 4. Database Driver Performance (Live Telemetry: 494 Users, 19 Columns)
+
+| Benchmark Metric | Pure-Python `PyMySQL` | Compiled C `mysqlclient` | Improvement |
+| :--- | :--- | :--- | :--- |
+| **Raw Wire Protocol Deserialization (p50)** | **21.29 ms** | **8.87 ms** | **-58.3% (2.4x faster)** ⚡ |
+| **Bulk ORM Hydration (All 494 Users, p50)** | **31.78 ms** | **19.37 ms** | **-39.1% (1.64x faster)** |
+| **Single User Query (p50)** | **3.07 ms** | **2.31 ms** | **-24.6% (1.33x faster)** |
+| **Max Tail Latency Spike (Single Query)** | 70.06 ms | **11.89 ms** | **-83.0% Tail Suppression** 🛡️ |
+| **Sustained Query Throughput** | 792.7 req/s | **1,117.1 req/s** | **+40.9% Higher Capacity** 🚀 |
 </details>
 
 ---
