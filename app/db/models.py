@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -81,9 +82,9 @@ class User(Base):
     sub_revoked_at = Column(DateTime, nullable=True, default=None)
     sub_updated_at = Column(DateTime, nullable=True, default=None)
     sub_last_user_agent = Column(String(512), nullable=True, default=None)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     note = Column(String(500), nullable=True, default=None)
-    online_at = Column(DateTime, nullable=True, default=None)
+    online_at = Column(DateTime, nullable=True, default=None, index=True)
     on_hold_expire_duration = Column(BigInteger, nullable=True, default=None)
     on_hold_timeout = Column(DateTime, nullable=True, default=None)
 
@@ -343,6 +344,7 @@ class NodeUserUsage(Base):
     __tablename__ = "node_user_usages"
     __table_args__ = (
         UniqueConstraint('created_at', 'user_id', 'node_id'),
+        Index('ix_node_user_usages_node_created', 'node_id', 'created_at'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -358,6 +360,7 @@ class NodeUsage(Base):
     __tablename__ = "node_usages"
     __table_args__ = (
         UniqueConstraint('created_at', 'node_id'),
+        Index('ix_node_usages_node_created', 'node_id', 'created_at'),
     )
 
     id = Column(Integer, primary_key=True)

@@ -26,7 +26,20 @@ def init_marzyar_db() -> None:
                 conn.commit()
             except Exception:
                 pass  # Column already exists or freshly created
-        logger.info("[Marzyar] Database tables verified and initialized safely.")
+
+            # Strategic DB Indexes for high-throughput scaling
+            for idx_sql in [
+                "CREATE INDEX ix_users_online_at ON users (online_at)",
+                "CREATE INDEX ix_users_created_at ON users (created_at)",
+                "CREATE INDEX ix_node_user_usages_node_created ON node_user_usages (node_id, created_at)",
+                "CREATE INDEX ix_node_usages_node_created ON node_usages (node_id, created_at)",
+            ]:
+                try:
+                    conn.execute(text(idx_sql))
+                    conn.commit()
+                except Exception:
+                    pass  # Index already exists
+        logger.info("[Marzyar] Database tables and indexes verified and initialized safely.")
     except Exception as e:
         logger.error(f"[Marzyar] Failed to initialize Marzyar database tables: {e}")
 
