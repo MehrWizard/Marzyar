@@ -113,7 +113,18 @@ def review():
 
             logger.info(f"User \"{user.username}\" status changed to {status}")
 
-        for user in get_users(db, status=UserStatus.on_hold):
+        on_hold_candidates = db.query(User).options(
+            joinedload(User.admin),
+            joinedload(User.next_plan)
+        ).filter(
+            User.status == UserStatus.on_hold,
+            or_(
+                User.online_at.isnot(None),
+                and_(User.on_hold_timeout.isnot(None), User.on_hold_timeout <= now)
+            )
+        ).all()
+
+        for user in on_hold_candidates:
             base_time = user.edit_at or user.created_at
 
             # Check if the user is online After or at 'base_time'
