@@ -782,6 +782,34 @@ class TestHardeningAndEdgeCases:
         assert mock_db.rollback.call_count == 2
         assert mock_db.commit.call_count == 1
 
+    def test_user_subscription_zero_db_cache_hit(self, db, make_admin, make_user):
+        from unittest.mock import MagicMock, patch
+        from app.routers.subscription import user_subscription
+        from app.subscription.cache import set_cached_subscription, invalidate_sub_cache
+
+        admin = make_admin()
+        u = make_user(admin)
+
+        invalidate_sub_cache()
+        set_cached_subscription(u.username, "ua:TestClient", "vmess://cached_link", "text/plain", {"custom-header": "test"})
+
+        mock_req = MagicMock()
+        mock_req.path_params = {"token": "valid_token"}
+        mock_req.headers = {"Accept": "*/*"}
+
+        # When cache hits, it must NEVER touch GetDB
+        with patch("app.routers.subscription.get_subscription_payload", return_value={"username": u.username, "created_at": 1000}), \
+             patch("app.routers.subscription.GetDB") as mock_get_db:
+            res = user_subscription(
+                request=mock_req,
+                user_agent="TestClient",
+            )
+            assert res.status_code == 200
+            assert res.body.decode() == "vmess://cached_link"
+            # GetDB was never entered
+            assert not mock_get_db.called
+
+
 
 
 
