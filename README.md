@@ -108,12 +108,16 @@ marzban update
 
 ## Performance & Real-World Telemetry Benchmarks
 
-Marzyar incorporates high-performance architectural optimizations engineered for large-scale production panels handling hundreds of concurrent VPN clients:
+Both **Marzdar** and **Marzyar** incorporate high-performance architectural optimizations engineered for large-scale production panels handling hundreds of concurrent VPN clients:
 
 1. **Rust-Powered ASGI Engine ([Granian](https://github.com/emmett-framework/granian))**: Replaced standard Python Uvicorn with Granian, an ultra-fast HTTP server utilizing the Tokio runtime and PyO3 bindings for high-throughput asynchronous networking with significantly lower CPU overhead.
 2. **Subscription In-Memory Response Caching**: Subscriptions are served from a bounded thread-safe memory cache (30s TTL) with instant automated invalidation whenever a user's configuration, status, or quota changes. Bypasses repetitive template rendering, cryptographic JWT operations, and redundant MySQL queries on continuous client polling.
 3. **Strategic Composite Database Indexing**: Added critical compound indexes on high-frequency tables (`users(online_at)`, `users(created_at)`, `node_user_usages(node_id, created_at)`, and `node_usages(node_id, created_at)`), eliminating sequential table scans and lock waits during node statistics aggregation.
 4. **Node Session Lifecycle & Stats Collection Resiliency**: Isolated node synchronization cycles, bounded gRPC timeouts, and transactional error handling ensure node stats collection never hangs or impairs API responsiveness.
+
+<p align="center">
+  <img src="docs/assets/benchmark.png" alt="Marzban vs Marzdar and Marzyar Benchmark" width="900" height="auto">
+</p>
 
 ```mermaid
 flowchart LR
@@ -132,7 +136,7 @@ Performance was continuously monitored across two consecutive 2-hour measurement
 
 #### 1. Subscription Endpoint Response Latency
 
-| Latency Percentile | Marzban / Marzdar (Baseline) | Marzyar (Optimized) | Improvement |
+| Latency Percentile | Marzban (Original / Baseline) | Marzdar & Marzyar (Optimized) | Improvement |
 | :--- | :--- | :--- | :--- |
 | **p50 (Median)** | **46.27 ms** | **25.84 ms** | **-44.2% (1.79x faster)** |
 | **p75** | **60.89 ms** | **43.38 ms** | **-28.8% faster** |
@@ -146,21 +150,21 @@ Performance was continuously monitored across two consecutive 2-hour measurement
 Subscription Latency Percentiles (Lower is better):
 
 p50 Median:
-  Baseline:  ████████████████████████ 46.27 ms
-  Marzyar:   █████████████ 25.84 ms (-44.2%)
+  Marzban:            ████████████████████████ 46.27 ms
+  Marzdar & Marzyar:  █████████████ 25.84 ms (-44.2%)
 
 p95 Tail:
-  Baseline:  ██████████████████████████████████████████████ 93.08 ms
-  Marzyar:   ████████████████████████████████████ 72.73 ms (-21.9%)
+  Marzban:            ██████████████████████████████████████████████ 93.08 ms
+  Marzdar & Marzyar:  ████████████████████████████████████ 72.73 ms (-21.9%)
 
 Max Tail Spike:
-  Baseline:  ████████████████████████████████████████████████████████████ 604.36 ms
-  Marzyar:   ███████████████ 148.94 ms (-75.4%)
+  Marzban:            ████████████████████████████████████████████████████████████ 604.36 ms
+  Marzdar & Marzyar:  ███████████████ 148.94 ms (-75.4%)
 ```
 
 #### 2. Resource Utilization & Peak Load Stability
 
-| Telemetry Metric | Marzban / Marzdar (Baseline) | Marzyar (Optimized) | Impact |
+| Telemetry Metric | Marzban (Original / Baseline) | Marzdar & Marzyar (Optimized) | Impact |
 | :--- | :--- | :--- | :--- |
 | **Peak Panel CPU Spike** | 139.34% | **68.86%** | **50.6% reduction in CPU spikes** |
 | **p99 Panel CPU** | 91.30% | **40.73%** | **55.4% lower CPU under load** |
@@ -173,7 +177,7 @@ Max Tail Spike:
 
 Standardized burst test evaluating subscription endpoint capacity under sustained concurrency (15 worker threads, 10 seconds continuous load):
 
-| Benchmark Metric | Baseline (Uvicorn / No Cache) | Marzyar (Granian + Cache + Indexes) | Impact |
+| Benchmark Metric | Marzban (Baseline: Uvicorn / No Cache) | Marzdar & Marzyar (Granian + Cache + Indexes) | Impact |
 | :--- | :--- | :--- | :--- |
 | **Throughput (Requests/sec)** | **33.2 req/s** | **57.1 req/s** | **+72.0% Throughput** 🚀 |
 | **Mean Latency under Load** | **447.66 ms** | **261.24 ms** | **-41.6% Latency** |
@@ -184,12 +188,12 @@ Standardized burst test evaluating subscription endpoint capacity under sustaine
 
 ```
 Concurrent Throughput (Higher is better):
-  Baseline: █████████████████████████████████ 33.2 req/s
-  Marzyar:  ████████████████████████████████████████████████████████ 57.1 req/s (+72.0%)
+  Marzban:            █████████████████████████████████ 33.2 req/s
+  Marzdar & Marzyar:  ████████████████████████████████████████████████████████ 57.1 req/s (+72.0%)
 
 Latency Under Stress Load (Lower is better):
-  Baseline: █████████████████████████████████████████████ 447.66 ms
-  Marzyar:  ██████████████████████████ 261.24 ms (-41.6%)
+  Marzban:            █████████████████████████████████████████████ 447.66 ms
+  Marzdar & Marzyar:  ██████████████████████████ 261.24 ms (-41.6%)
 ```
 
 ---
