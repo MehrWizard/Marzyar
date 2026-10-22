@@ -48,6 +48,14 @@ from app.utils.helpers import calculate_expiration_days, calculate_usage_percent
 from config import NOTIFY_DAYS_LEFT, NOTIFY_REACHED_USAGE_PERCENT, USERS_AUTODELETE_DAYS
 
 
+def _invalidate_user_sub_cache(username: str):
+    try:
+        from app.subscription.cache import invalidate_sub_cache
+        invalidate_sub_cache(username)
+    except Exception:
+        pass
+
+
 def add_default_host(db: Session, inbound: ProxyInbound):
     """
     Adds a default host to a proxy inbound.
@@ -456,6 +464,7 @@ def remove_user(db: Session, dbuser: User) -> User:
 
     db.delete(dbuser)
     db.commit()
+    _invalidate_user_sub_cache(dbuser.username)
 
     if admin_id:
         try:
@@ -642,6 +651,7 @@ def update_user(db: Session, dbuser: User, modify: UserModify) -> User:
 
     db.commit()
     db.refresh(dbuser)
+    _invalidate_user_sub_cache(dbuser.username)
     return dbuser
 
 
@@ -710,6 +720,7 @@ def reset_user_data_usage(db: Session, dbuser: User) -> User:
         except Exception:
             pass
 
+    _invalidate_user_sub_cache(dbuser.username)
     return dbuser
 
 
@@ -802,6 +813,7 @@ def reset_user_by_next(db: Session, dbuser: User) -> User:
         except Exception:
             pass
 
+    _invalidate_user_sub_cache(dbuser.username)
     return dbuser
 
 
@@ -1113,6 +1125,7 @@ def update_user_status(db: Session, dbuser: User, status: UserStatus) -> User:
     dbuser.last_status_change = datetime.utcnow()
     db.commit()
     db.refresh(dbuser)
+    _invalidate_user_sub_cache(dbuser.username)
     return dbuser
 
 
