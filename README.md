@@ -70,6 +70,25 @@ While **Marzdar** focuses on completing the missing user interface elements of u
 
 ---
 
+## Setup & Migration
+
+### Migrating from Marzban or Marzdar
+
+Simply update the image in `docker-compose.yml`:
+
+```yaml
+services:  
+  marzban:  
+    image: mehrwizard/marzyar:latest
+```
+
+Then restart:
+```bash
+marzban update
+```
+
+---
+
 ## API Endpoints
 
 In addition to standard upstream Marzban APIs, Marzyar provides dedicated REST endpoints under the `/api/marzyar` prefix for managing reseller quotas, user slot limits, overselling modes, allowed inbounds, and locked users.
@@ -277,25 +296,6 @@ curl -X GET "https://your-panel-domain:8000/api/marzyar/locked_users" \
 | **Auto-Lock on Over-Quota** | ❌ None | ❌ None | ✅ Real-time Xray detach/restore |
 | **Allowed Inbounds Filtering**| ❌ None | ❌ None | ✅ Admin-level restriction |
 | **Bidirectional Rollback** | Baseline | ✅ Safe | ✅ 100% Safe (No custom Alembic revisions) |
-
----
-
-## Setup & Migration
-
-### Migrating from Marzban or Marzdar
-
-Simply update the image in `docker-compose.yml`:
-
-```yaml
-services:  
-  marzban:  
-    image: mehrwizard/marzyar:latest
-```
-
-Then restart:
-```bash
-marzban update
-```
 
 ---
 
