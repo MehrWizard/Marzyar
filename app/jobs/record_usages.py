@@ -8,6 +8,11 @@ try:
     from pymysql.err import OperationalError as PyMySQLOperationalError
 except ImportError:
     PyMySQLOperationalError = None
+
+try:
+    from MySQLdb import OperationalError as MySQLdbOperationalError
+except ImportError:
+    MySQLdbOperationalError = None
 from sqlalchemy import and_, bindparam, func, insert, select, update
 from sqlalchemy.exc import OperationalError as SAOperationalError
 from sqlalchemy.orm import Session
@@ -26,9 +31,12 @@ from xray_api import exc as xray_exc
 
 
 def safe_execute(db: Session, stmt, params=None):
-    catches = (SAOperationalError,)
+    catches = [SAOperationalError]
     if PyMySQLOperationalError is not None:
-        catches = (SAOperationalError, PyMySQLOperationalError)
+        catches.append(PyMySQLOperationalError)
+    if MySQLdbOperationalError is not None:
+        catches.append(MySQLdbOperationalError)
+    catches = tuple(catches)
 
     if db.bind.name == 'mysql':
         if isinstance(stmt, Insert):
